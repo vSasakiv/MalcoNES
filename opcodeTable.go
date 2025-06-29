@@ -1,6 +1,78 @@
 package main
 
 const ADC = "ADC"
+const ORA = "ORA"
+const AND = "AND"
+const EOR = "EOR"
+const STA = "STA"
+const LDA = "LDA"
+const CMP = "CMP"
+const SBC = "SBC"
+const BIT = "BIT"
+const ASL = "ASL"
+const ROL = "ROL"
+const LSR = "LSR"
+const ROR = "ROR"
+const DEC = "DEC"
+const INC = "INC"
+
+const SLO = "SLO"
+const RLA = "RLA"
+const SRE = "SRE"
+const RRA = "RRA"
+const SAX = "SAX"
+const LAX = "LAX"
+const DCP = "DCP"
+const ISC = "ISC"
+
+const BRK = "BRK"
+
+const PHP = "PHP"
+const PLP = "PLP"
+const PHA = "PHA"
+const PLA = "PLA"
+const RTI = "RTI"
+const RTS = "RTS"
+
+const BPL = "BPL"
+const BMI = "BMI"
+const BVC = "BVC"
+const BVS = "BVS"
+const BCC = "BCC"
+const BCS = "BCS"
+const BNE = "BNE"
+const BEQ = "BEQ"
+const JMP = "JMP"
+const JSR = "JSR"
+
+const CLC = "CLC"
+const SEC = "SEC"
+const CLI = "CLI"
+const SEI = "SEI"
+const CLV = "CLV"
+const CLD = "CLD"
+const SED = "SED"
+
+const STY = "STY"
+const STX = "STX"
+const DEY = "DEY"
+const DEX = "DEX"
+const TYA = "TYA"
+const TXA = "TXA"
+const SHY = "SHY"
+const SHX = "SHX"
+const LDY = "LDY"
+const LDX = "LDX"
+const TAY = "TAY"
+const TAX = "TAX"
+const CPY = "CPY"
+const CPX = "CPX"
+const INX = "INX"
+const INY = "INY"
+const TSX = "TSX"
+const TXS = "TXS"
+
+const NOP = "NOP"
 
 func Generate() map[uint8]string {
 	opcodeTable := map[uint8]string{
@@ -12,6 +84,254 @@ func Generate() map[uint8]string {
 		0x75: ADC,
 		0x79: ADC,
 		0x7D: ADC,
+
+		0x09: ORA,
+		0x05: ORA,
+		0x15: ORA,
+		0x0D: ORA,
+		0x1D: ORA,
+		0x19: ORA,
+		0x01: ORA,
+		0x11: ORA,
+
+		0x29: AND,
+		0x25: AND,
+		0x35: AND,
+		0x2D: AND,
+		0x3D: AND,
+		0x39: AND,
+		0x21: AND,
+		0x31: AND,
+
+		0x49: EOR,
+		0x45: EOR,
+		0x55: EOR,
+		0x4D: EOR,
+		0x5D: EOR,
+		0x59: EOR,
+		0x41: EOR,
+		0x51: EOR,
+
+		0x85: STA,
+		0x95: STA,
+		0x8D: STA,
+		0x9D: STA,
+		0x99: STA,
+		0x81: STA,
+		0x91: STA,
+
+		0xA9: LDA,
+		0xA5: LDA,
+		0xB5: LDA,
+		0xAD: LDA,
+		0xBD: LDA,
+		0xB9: LDA,
+		0xA1: LDA,
+		0xB1: LDA,
+
+		0xC9: CMP,
+		0xC5: CMP,
+		0xD5: CMP,
+		0xCD: CMP,
+		0xDD: CMP,
+		0xD9: CMP,
+		0xC1: CMP,
+		0xD1: CMP,
+
+		0xE9: SBC,
+		0xE5: SBC,
+		0xF5: SBC,
+		0xED: SBC,
+		0xFD: SBC,
+		0xF9: SBC,
+		0xE1: SBC,
+		0xF1: SBC,
+
+		0x24: BIT,
+		0x2C: BIT,
+
+		0x0A: ASL,
+		0x06: ASL,
+		0x16: ASL,
+		0x0E: ASL,
+		0x1E: ASL,
+
+		0x2A: ROL,
+		0x26: ROL,
+		0x36: ROL,
+		0x2E: ROL,
+		0x3E: ROL,
+
+		0x4A: LSR,
+		0x46: LSR,
+		0x56: LSR,
+		0x4E: LSR,
+		0x5E: LSR,
+
+		0x6A: ROR,
+		0x66: ROR,
+		0x76: ROR,
+		0x6E: ROR,
+		0x7E: ROR,
+
+		0x07: SLO,
+		0x17: SLO,
+		0x0F: SLO,
+		0x1F: SLO,
+		0x03: SLO,
+		0x13: SLO,
+
+		0x27: RLA,
+		0x37: RLA,
+		0x2F: RLA,
+		0x3F: RLA,
+		0x23: RLA,
+		0x33: RLA,
+
+		0x47: SRE,
+		0x57: SRE,
+		0x4F: SRE,
+		0x5F: SRE,
+		0x43: SRE,
+		0x53: SRE,
+
+		0x67: RRA,
+		0x77: RRA,
+		0x6F: RRA,
+		0x7F: RRA,
+		0x63: RRA,
+		0x73: RRA,
+
+		0x87: SAX,
+		0x97: SAX,
+		0x83: SAX,
+		0x8F: SAX,
+
+		0xA7: LAX,
+		0xB7: LAX,
+		0xAF: LAX,
+		0xBF: LAX,
+		0xA3: LAX,
+		0xB3: LAX,
+
+		0xC6: DEC,
+		0xD6: DEC,
+		0xCE: DEC,
+		0xDE: DEC,
+
+		0xC7: DCP,
+		0xD7: DCP,
+		0xCF: DCP,
+		0xDF: DCP,
+		0xDB: DCP,
+		0xC3: DCP,
+		0xD3: DCP,
+
+		0xE7: ISC,
+		0xF7: ISC,
+		0xEF: ISC,
+		0xFF: ISC,
+		0xFB: ISC,
+		0xE3: ISC,
+		0xF3: ISC,
+
+		0xE6: INC,
+		0xF6: INC,
+		0xEE: INC,
+		0xFE: INC,
+
+		0x00: BRK,
+
+		0x08: PHP,
+		0x28: PLP,
+		0x40: RTI,
+		0x48: PHA,
+		0x68: PLA,
+		0x60: RTS,
+
+		0x10: BPL,
+		0x30: BMI,
+		0x20: JSR,
+		0x4C: JMP,
+		0x6C: JMP,
+		0x50: BVC,
+		0x70: BVS,
+		0x90: BCC,
+		0xB0: BCS,
+		0xD0: BNE,
+		0xF0: BEQ,
+
+		0x18: CLC,
+		0x38: SEC,
+		0x58: CLI,
+		0x78: SEI,
+		0xB8: CLV,
+		0xD8: CLD,
+		0xF8: CLD,
+
+		0x84: STY,
+		0x94: STY,
+		0x8C: STY,
+		0x88: DEY,
+		0x98: TYA,
+		0xA8: TAY,
+		0x9C: SHY,
+		0xA0: LDY,
+		0xA4: LDY,
+		0xB4: LDY,
+		0xBC: LDY,
+		0xAC: LDY,
+		0xC0: CPY,
+		0xC4: CPY,
+		0xCC: CPY,
+		0xC8: INY,
+
+		0x86: STX,
+		0x96: STX,
+		0x8E: STX,
+		0xCA: DEX,
+		0x8A: TXA,
+		0xAA: TAX,
+		0x9E: SHX,
+		0xA2: LDX,
+		0xA6: LDX,
+		0xB6: LDX,
+		0xBE: LDX,
+		0xAE: LDX,
+		0xE0: CPX,
+		0xE4: CPX,
+		0xEC: CPX,
+		0xE8: INX,
+		0xBA: TSX,
+		0x9A: TXS,
+
+		0x89: NOP,
+		0x04: NOP,
+		0x0c: NOP,
+		0x14: NOP,
+		0x1C: NOP,
+		0x34: NOP,
+		0x3C: NOP,
+		0x44: NOP,
+		0x54: NOP,
+		0x5C: NOP,
+		0x64: NOP,
+		0x74: NOP,
+		0x7C: NOP,
+		0x80: NOP,
+		0xD4: NOP,
+		0xDC: NOP,
+		0xF4: NOP,
+		0xFC: NOP,
+		0x1A: NOP,
+		0x3A: NOP,
+		0x5A: NOP,
+		0x7A: NOP,
+		0xDA: NOP,
+		0xFA: NOP,
+		0x82: NOP,
+		0xC2: NOP,
+		0xE2: NOP,
 	}
 	return opcodeTable
 }
