@@ -1,4 +1,4 @@
-package main
+package cpu
 
 const ADC = "ADC"
 const ORA = "ORA"
@@ -24,6 +24,14 @@ const SAX = "SAX"
 const LAX = "LAX"
 const DCP = "DCP"
 const ISC = "ISC"
+const ANC = "ANC"
+const ALR = "ALR"
+const ARR = "ARR"
+const LXA = "LXA"
+const AXS = "AXS"
+const SHA = "SHA"
+const TAS = "TAS"
+const LAS = "LAS"
 
 const BRK = "BRK"
 
@@ -139,6 +147,7 @@ func Generate() map[uint8]string {
 		0xD1: CMP,
 
 		0xE9: SBC,
+		0xEB: SBC,
 		0xE5: SBC,
 		0xF5: SBC,
 		0xED: SBC,
@@ -234,6 +243,18 @@ func Generate() map[uint8]string {
 		0xFB: ISC,
 		0xE3: ISC,
 		0xF3: ISC,
+
+		0x0B: ANC,
+		0x2B: ANC,
+
+		0x4B: ALR,
+		0x6B: ARR,
+		0xAB: LXA,
+		0xCB: AXS,
+		0x9F: SHA,
+		0x93: SHA,
+		0x9B: TAS,
+		0xBB: LAS,
 
 		0xE6: INC,
 		0xF6: INC,
