@@ -1,11 +1,12 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"vsasakiv/nesemulator/cpu"
+	"vsasakiv/nesemulator/memory"
+)
 
 func main() {
-	// MainMemory.memWrite(0, 0xA9)
-	// MainMemory.memWrite(1, 0x09)
-	// MainMemory.memWrite(2, 0xC9)
 	// MainMemory.memWrite(3, 0x09)
 	// cpu := NewCpu()
 	//
@@ -14,9 +15,13 @@ func main() {
 	// cpu.executeNext()
 	// cpu.printStatus()
 
-	var pc uint16 = 0x0608
-	var mem uint8 = 0xf8
-	result := uint16(int16(pc) + int16(2) + int16(int8(mem)))
-
-	fmt.Printf("val: %x\n", result)
+	memory.MemWrite(0, 0x8E)
+	memory.MemWrite(1, 0x00)
+	memory.MemWrite(2, 0x02)
+	mainCpu := cpu.GetCpu()
+	trace := mainCpu.TraceStatus()
+	cpu.ExecuteNext()
+	cpu.ExecuteNext()
+	cpu.ExecuteNext()
+	fmt.Printf("%s\n", trace)
 }

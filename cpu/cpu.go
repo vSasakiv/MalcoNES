@@ -26,6 +26,10 @@ func NewCpu() *Cpu {
 	return &cpu
 }
 
+func GetCpu() *Cpu {
+	return &cpu
+}
+
 var cpu Cpu = *NewCpu()
 
 func ExecuteNext() {
@@ -335,6 +339,7 @@ func ExecuteNext() {
 	case PLA:
 		cpu.Acc = cpu.pullFromStack()
 		cpu.calcAndSetFlags([]string{Zero, Negative}, uint16(cpu.Acc), 0, 0)
+		cpu.Pc += 1
 	case RTI:
 		cpu.Psts = cpu.pullFromStack()
 		cpu.Pc = cpu.pullFromStack16()

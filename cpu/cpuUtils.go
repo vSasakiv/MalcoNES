@@ -183,12 +183,49 @@ func (cpu *Cpu) setCompareFlags(operand uint8, reg uint8) {
 	}
 }
 
-func (cpu *Cpu) printStatus() {
-	fmt.Println("####  Current CPU Register Status  ####")
-	fmt.Printf("Program Counter: %4x   Accumulator: %2x\n", cpu.Pc, cpu.Acc)
-	fmt.Printf("X Index: %2x   Y Index: %2x Stack Pointer: %2x\n", cpu.Xidx, cpu.Yidx, cpu.Sptr)
-	fmt.Printf("Carry: %1b Zero: %1b InterruptDisable: %1b Decimal %1b Overflow %1b Negative %1b\n",
-		cpu.getFlag(Carry), cpu.getFlag(Zero), cpu.getFlag(InterruptDisable),
-		cpu.getFlag(Decimal), cpu.getFlag(Overflow), cpu.getFlag(Negative))
-	fmt.Println("#### Current CPU Register Status  ####")
+func (cpu *Cpu) TraceStatus() string {
+	opcode := memory.MemRead(cpu.Pc)
+
+	pc := fmt.Sprintf("%04X  ", cpu.Pc)
+	size := getInstructionSize(opcode)
+	instructionHex := ""
+	for i := range size {
+		instructionHex += fmt.Sprintf("%02X ", memory.MemRead(cpu.Pc+uint16(i)))
+	}
+	for range 3 - size {
+		instructionHex += "   "
+	}
+	instructionHex += " "
+	instructionMnemonic := cpu.opcodeTable[opcode] + " "
+	instructionOp := getOperand(opcode)
+	return pc + instructionHex + instructionMnemonic
+}
+
+func getOperand(opcode uint8) string {
+
+}
+
+func getInstructionSize(opcode uint8) uint8 {
+	mnemonic := cpu.opcodeTable[opcode]
+	addresingMode := (opcode >> 2) & 0b00000111
+
+	switch mnemonic {
+	case ASL, ROL, LSR, ROR:
+		if opcode == 0x0A || opcode == 0x2A || opcode == 0x4A || opcode == 0x6A {
+			return 1
+		} else {
+			_, size := cpu.getAluAddress(addresingMode)
+			return size
+		}
+	case BRK, PHP, PLP, PHA, PLA, RTI, RTS, CLC, SEC,
+		CLI, SEI, CLV, CLD, SED, DEY, DEX, TYA, TXA,
+		TAY, TAX, INY, INX, TSX, TXS:
+		return 1
+	case BPL, BMI, BVC, BVS, BCC, BCS, BNE, BEQ:
+		return 2
+	case JMP, JSR:
+		return 3
+	}
+	_, size := cpu.getAluAddress(addresingMode)
+	return size
 }
