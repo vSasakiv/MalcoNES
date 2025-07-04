@@ -61,7 +61,7 @@ func ReadFromFile(path string) Cartridge {
 	cartridge.PrgRom = prgRom
 
 	chrRom := make([]byte, cartridge.ChrRomSize)
-	_, err = io.ReadFull(reader, prgRom)
+	_, err = io.ReadFull(reader, chrRom)
 	if err != nil {
 		fmt.Println("Error reading CHR ROM", err)
 		panic("Error reading from file")

@@ -1,34 +1,18 @@
-package main
+package cpu
 
 import (
 	"bufio"
 	"fmt"
 	"os"
 	"slices"
+	"testing"
 	"vsasakiv/nesemulator/cartridge"
-	"vsasakiv/nesemulator/cpu"
 	"vsasakiv/nesemulator/memory"
 )
 
-func main() {
-	// MainMemory.memWrite(3, 0x09)
-	// cpu := NewCpu()
-	//
-	// cpu.executeNext()
-	// cpu.printStatus()
-	// cpu.executeNext()
-	// cpu.printStatus()
-	// time.AfterFunc(1*time.Second, func() {
-	// 	fmt.Println("Time limit reached. Exiting program.")
-	// 	os.Exit(0) // Exit with a success status
-	// })
+func NesTestLineByLine(t *testing.T) {
 
-	NesTestLineByLine()
-}
-
-func NesTestLineByLine() {
-
-	file, err := os.Open("./testFiles/nestest.log")
+	file, err := os.Open("../testFiles/nestest.log")
 	if err != nil {
 		fmt.Println("Error opening nestest.log!")
 		return
@@ -37,20 +21,18 @@ func NesTestLineByLine() {
 
 	nestest := cartridge.ReadFromFile("./testFiles/nestest.nes")
 	memory.LoadFromCartridge(nestest)
-	cpu.GetCpu().Pc = 0xC000
+	GetCpu().Pc = 0xC000
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
-		logTrace := line[:73]
-		cpuTrace := cpu.GetCpu().TraceStatus()
+		logTrace := line[:74]
+		cpuTrace := cpu.TraceStatus()
 
 		if logTrace != cpuTrace {
 			errorLog := generateErrorLog(logTrace, cpuTrace)
-			fmt.Printf("%s", errorLog)
-			return
+			t.Errorf("%s", errorLog)
 		}
-		cpu.ExecuteNext()
 	}
 }
 
@@ -58,14 +40,14 @@ func generateErrorLog(logTrace string, cpuTrace string) string {
 	var diff []int
 	errorLog := ""
 
-	for i := range cpuTrace {
+	for i := range logTrace {
 		if logTrace[i] != cpuTrace[i] {
 			diff = append(diff, i)
 		}
 	}
 
 	errorLog += logTrace + "\n"
-	for i := range cpuTrace {
+	for i := range logTrace {
 		if slices.Contains(diff, i) {
 			errorLog += "^"
 		} else {

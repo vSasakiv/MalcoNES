@@ -6,7 +6,12 @@ import (
 	"vsasakiv/nesemulator/cartridge"
 )
 
-type Memory [0xFFFF]uint8
+// type Memory [0xFFFF]uint8
+
+type Memory struct {
+	ram [0x0800]uint8
+	rom cartridge.Cartridge
+}
 
 var MainMemory Memory
 
@@ -16,39 +21,75 @@ var modified Memory
 var debug bool = true
 
 func LoadFromCartridge(cartridge cartridge.Cartridge) {
-	// if size is 16KiB we have to mirror to the reamining 16KiB
-	if cartridge.PrgRomSize == 0x4000 {
-		copy(MainMemory[0x8000:], cartridge.PrgRom)
-		copy(MainMemory[0xB000:], cartridge.PrgRom)
-	} else {
-		copy(MainMemory[0x8000:], cartridge.PrgRom)
-	}
+	MainMemory.rom = cartridge
 }
 
 func MemRead(addr uint16) uint8 {
-	return MainMemory[addr]
+	switch {
+	case addr <= 0x07FF:
+		return MainMemory.ram[addr]
+	case addr >= 0x8000:
+		return readPrgRom(addr)
+	}
+	return 0
 }
 
 func MemRead16(addr uint16) uint16 {
-	low := uint16(MainMemory[addr])
-	high := uint16(MainMemory[addr+1]) << 8
-	return high + low
+	switch {
+	case addr <= 0x07FF:
+		// zero page reading, should wrap
+		var low, high uint16
+		if addr == 0x00FF {
+			low = uint16(MainMemory.ram[addr])
+			high = uint16(MainMemory.ram[0x0000]) << 8
+		} else {
+			low = uint16(MainMemory.ram[addr])
+			high = uint16(MainMemory.ram[addr+1]) << 8
+		}
+		return high + low
+	case addr >= 0x8000:
+		low := uint16(readPrgRom(addr))
+		high := uint16(readPrgRom(addr+1)) << 8
+		return high + low
+	}
+	return 0
 }
 
 func MemWrite(addr uint16, val uint8) {
-	if debug {
-		modified[addr] = 1
+	switch {
+	case addr <= 0x07FF:
+		if debug {
+			modified.ram[addr] = 1
+		}
+		MainMemory.ram[addr] = val
+	case addr >= 0x8000:
+		fmt.Println("Warning: cant write to ROM")
+		return
 	}
-	MainMemory[addr] = val
 }
 
 func MemWrite16(addr uint16, val uint16) {
-	if debug {
-		modified[addr] = 1
-		modified[addr+1] = 1
+	switch {
+	case addr <= 0x07FF:
+		if debug {
+			modified.ram[addr] = 1
+			modified.ram[addr+1] = 1
+		}
+		MainMemory.ram[addr] = uint8(val & 0xff)
+		MainMemory.ram[addr+1] = uint8((val >> 8) & 0xff)
+	case addr >= 0x8000:
+		fmt.Println("Warning: cant write to ROM")
+		return
 	}
-	MainMemory[addr] = uint8(val & 0xff)
-	MainMemory[addr+1] = uint8((val >> 8) & 0xff)
+}
+
+func readPrgRom(addr uint16) uint8 {
+	addr -= 0x8000
+	// mirrors address if needed
+	if MainMemory.rom.PrgRomSize == 0x4000 && addr >= 0x4000 {
+		addr = addr % 0x4000
+	}
+	return MainMemory.rom.PrgRom[addr]
 }
 
 func HexDump(filename string) {
@@ -56,7 +97,7 @@ func HexDump(filename string) {
 	content := ""
 
 	for i := range 0xffff {
-		if modified[i] == 1 {
+		if modified.ram[i] == 1 {
 			content += fmt.Sprintf("%4x : %2x\n", i, MemRead(uint16(i)))
 		}
 	}

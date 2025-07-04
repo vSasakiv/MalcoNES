@@ -20,7 +20,7 @@ type Cpu struct {
 // Initialize cpu with corret parameters, also initialize instructionTable
 func NewCpu() *Cpu {
 	var cpu Cpu
-	cpu.Psts = 0b00110000
+	cpu.Psts = 0b00100100
 	cpu.Sptr = 0xFD
 	cpu.opcodeTable = Generate()
 	return &cpu
@@ -81,6 +81,7 @@ func ExecuteNext() {
 		op, size := cpu.getAluOperand(addresingMode)
 		var result uint16 = uint16(cpu.Acc) + uint16(^op) + uint16(cpu.getFlag(Carry))
 		cpu.calcAndSetFlags([]string{Carry, Zero, Overflow, Negative}, uint16(result), cpu.Acc, ^op)
+		cpu.Acc = uint8(result)
 		cpu.Pc += uint16(size)
 	case ASL:
 		// has accumulator addressing
@@ -142,17 +143,19 @@ func ExecuteNext() {
 	case ROR:
 		// has accumulator addressing
 		if instruction == 0x6A {
-			cpu.setFlag(Carry, cpu.Acc&0b1)
-			result := (cpu.Acc >> 1) + (cpu.Acc << 7)
+			carry := cpu.Acc & 0b1
+			result := (cpu.Acc >> 1) + (cpu.getFlag(Carry) << 7)
+			cpu.setFlag(Carry, carry)
 			cpu.calcAndSetFlags([]string{Zero, Negative}, uint16(result), 0, 0)
 
 			cpu.Acc = result
 			cpu.Pc += 1
 		} else {
 			address, size := cpu.getAluAddress(addresingMode)
+			carry := cpu.Acc & 0b1
 			op := memory.MemRead(address)
-			cpu.setFlag(Carry, op&0b1)
-			result := (op >> 1) + (op << 7)
+			result := (op >> 1) + (cpu.getFlag(Carry) << 7)
+			cpu.setFlag(Carry, carry)
 			cpu.calcAndSetFlags([]string{Zero, Negative}, uint16(result), 0, 0)
 
 			memory.MemWrite(address, result)
@@ -328,10 +331,11 @@ func ExecuteNext() {
 		cpu.setFlag(InterruptDisable, 1)
 		cpu.Pc = 0xFFFE
 	case PHP:
-		cpu.pushToStack(cpu.Psts | 0b00110000)
+		cpu.pushToStack(cpu.Psts | 0b00010000)
 		cpu.Pc += 1
 	case PLP:
-		cpu.Psts = cpu.pullFromStack()
+		// B and Unused flags
+		cpu.Psts = (cpu.pullFromStack() & 0b11101111) | 0b00100000
 		cpu.Pc += 1
 	case PHA:
 		cpu.pushToStack(cpu.Acc)
@@ -341,7 +345,8 @@ func ExecuteNext() {
 		cpu.calcAndSetFlags([]string{Zero, Negative}, uint16(cpu.Acc), 0, 0)
 		cpu.Pc += 1
 	case RTI:
-		cpu.Psts = cpu.pullFromStack()
+		// B and Unused flags
+		cpu.Psts = (cpu.pullFromStack() & 0b11101111) | 0b00100000
 		cpu.Pc = cpu.pullFromStack16()
 	case RTS:
 		cpu.Pc = cpu.pullFromStack16() + 1
@@ -401,8 +406,15 @@ func ExecuteNext() {
 	case JMP:
 		aluAddress, _ := cpu.getAluAddress(addresingMode)
 		// only occourence of indirect absolute
-		if instruction == 0x68 {
-			cpu.Pc = memory.MemRead16(aluAddress)
+		if instruction == 0x6C {
+			// instruction has bug
+			if aluAddress&0x00FF == 0x00FF {
+				low := uint16(memory.MemRead(aluAddress))
+				high := uint16(memory.MemRead(aluAddress&0xFF00)) << 8
+				cpu.Pc = high + low
+			} else {
+				cpu.Pc = memory.MemRead16(aluAddress)
+			}
 		} else {
 			cpu.Pc = aluAddress
 		}
@@ -448,15 +460,22 @@ func ExecuteNext() {
 		memory.MemWrite(address, cpu.Xidx&(memory.MemRead(cpu.Pc+2)+1))
 		cpu.Pc += uint16(size)
 	case LDY:
-		op, size := cpu.getAluOperand(addresingMode)
+		var op, size uint8
+		// out of pattern operand
+		if instruction == 0xA0 {
+			op, size = cpu.getAluOperand(immediate)
+		} else {
+			op, size = cpu.getAluOperand(addresingMode)
+		}
 		cpu.calcAndSetFlags([]string{Zero, Negative}, uint16(op), 0, 0)
 		cpu.Yidx = op
 		cpu.Pc += uint16(size)
 	case LDX:
 		const zeroPageY uint8 = 0b101
-		var op uint8
-		var size uint8
-		if addresingMode == zeroPageY {
+		var op, size uint8
+		if instruction == 0xA2 {
+			op, size = cpu.getAluOperand(immediate)
+		} else if addresingMode == zeroPageY {
 			op, size = cpu.getAluOperandZeroPageY()
 		} else {
 			op, size = cpu.getAluOperand(addresingMode)
@@ -473,11 +492,23 @@ func ExecuteNext() {
 		cpu.calcAndSetFlags([]string{Zero, Negative}, uint16(cpu.Acc), 0, 0)
 		cpu.Pc += 1
 	case CPY:
-		op, size := cpu.getAluOperand(addresingMode)
+		var op, size uint8
+		// out of pattern operand
+		if instruction == 0xC0 {
+			op, size = cpu.getAluOperand(immediate)
+		} else {
+			op, size = cpu.getAluOperand(addresingMode)
+		}
 		cpu.setCompareFlags(op, cpu.Yidx)
 		cpu.Pc += uint16(size)
 	case CPX:
-		op, size := cpu.getAluOperand(addresingMode)
+		var op, size uint8
+		// out of pattern operand
+		if instruction == 0xE0 {
+			op, size = cpu.getAluOperand(immediate)
+		} else {
+			op, size = cpu.getAluOperand(addresingMode)
+		}
 		cpu.setCompareFlags(op, cpu.Xidx)
 		cpu.Pc += uint16(size)
 	case INY:
@@ -494,6 +525,8 @@ func ExecuteNext() {
 		cpu.Pc += 1
 	case TXS:
 		cpu.Sptr = cpu.Xidx
+		cpu.Pc += 1
+	case NOP:
 		cpu.Pc += 1
 	}
 }

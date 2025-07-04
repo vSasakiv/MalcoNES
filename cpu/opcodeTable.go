@@ -288,7 +288,7 @@ func Generate() map[uint8]string {
 		0x78: SEI,
 		0xB8: CLV,
 		0xD8: CLD,
-		0xF8: CLD,
+		0xF8: SED,
 
 		0x84: STY,
 		0x94: STY,
@@ -334,6 +334,7 @@ func Generate() map[uint8]string {
 		0x34: NOP,
 		0x3C: NOP,
 		0x44: NOP,
+		0xEA: NOP,
 		0x54: NOP,
 		0x5C: NOP,
 		0x64: NOP,

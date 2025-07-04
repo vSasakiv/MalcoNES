@@ -3,20 +3,22 @@ package cpu
 import (
 	"fmt"
 	"log"
+	"os"
+	"strings"
 	"vsasakiv/nesemulator/memory"
 )
 
+const idxindirectX uint8 = 0b000
+const zeroPage uint8 = 0b001
+const immediate uint8 = 0b010
+const absolute uint8 = 0b011
+const indirectidxY uint8 = 0b100
+const zeroPageX uint8 = 0b101
+const absoluteY uint8 = 0b110
+const absoluteX uint8 = 0b111
+
 // Receives an adressingMode, and returns the operand and total size of the instruction
 func (cpu *Cpu) getAluOperand(addressingMode uint8) (uint8, uint8) {
-	const idxindirectX uint8 = 0b000
-	const zeroPage uint8 = 0b001
-	const immediate uint8 = 0b010
-	const absolute uint8 = 0b011
-	const indirectidxY uint8 = 0b100
-	const zeroPageX uint8 = 0b101
-	const absoluteY uint8 = 0b110
-	const absoluteX uint8 = 0b111
-
 	address, size := cpu.getAluAddress(addressingMode)
 	return memory.MemRead(address), size
 }
@@ -36,15 +38,6 @@ func (cpu *Cpu) getAluAddressZeroPageY() (uint16, uint8) {
 
 // Receives an adressingMode, and returns the address and total size of the instruction
 func (cpu *Cpu) getAluAddress(addressingMode uint8) (uint16, uint8) {
-	const idxindirectX uint8 = 0b000
-	const zeroPage uint8 = 0b001
-	const immediate uint8 = 0b010
-	const absolute uint8 = 0b011
-	const indirectidxY uint8 = 0b100
-	const zeroPageX uint8 = 0b101
-	const absoluteY uint8 = 0b110
-	const absoluteX uint8 = 0b111
-
 	switch addressingMode {
 	case idxindirectX:
 		zeroPageAddress := memory.MemRead(cpu.Pc + 1)
@@ -56,7 +49,8 @@ func (cpu *Cpu) getAluAddress(addressingMode uint8) (uint16, uint8) {
 	case absolute:
 		return memory.MemRead16(cpu.Pc + 1), 3
 	case indirectidxY:
-		return memory.MemRead16(cpu.Pc+1) + uint16(cpu.Yidx), 2
+		nextByte := memory.MemRead(cpu.Pc + 1)
+		return memory.MemRead16(uint16(nextByte)) + uint16(cpu.Yidx), 2
 	case zeroPageX:
 		return uint16(memory.MemRead(cpu.Pc+1) + cpu.Xidx), 2
 	case absoluteY:
@@ -74,17 +68,41 @@ func (cpu *Cpu) getAluAddress(addressingMode uint8) (uint16, uint8) {
 func (cpu *Cpu) setFlag(flag string, val uint8) {
 	switch flag {
 	case Carry:
-		cpu.Psts = cpu.Psts | val
+		if val == 1 {
+			cpu.Psts |= 1
+		} else {
+			cpu.Psts &^= 1
+		}
 	case Zero:
-		cpu.Psts = cpu.Psts | (val << 1)
+		if val == 1 {
+			cpu.Psts |= 1 << 1
+		} else {
+			cpu.Psts &^= 1 << 1
+		}
 	case InterruptDisable:
-		cpu.Psts = cpu.Psts | (val << 2)
+		if val == 1 {
+			cpu.Psts |= 1 << 2
+		} else {
+			cpu.Psts &^= 1 << 2
+		}
 	case Decimal:
-		cpu.Psts = cpu.Psts | (val << 3)
+		if val == 1 {
+			cpu.Psts |= 1 << 3
+		} else {
+			cpu.Psts &^= 1 << 3
+		}
 	case Overflow:
-		cpu.Psts = cpu.Psts | (val << 6)
+		if val == 1 {
+			cpu.Psts |= 1 << 6
+		} else {
+			cpu.Psts &^= 1 << 6
+		}
 	case Negative:
-		cpu.Psts = cpu.Psts | (val << 7)
+		if val == 1 {
+			cpu.Psts |= 1 << 7
+		} else {
+			cpu.Psts &^= 1 << 7
+		}
 	default:
 		log.Printf("Warning: cpu.setFlag invalid flag: %s\n", flag)
 	}
@@ -122,13 +140,13 @@ func (cpu *Cpu) calcAndSetFlags(flags []string, result uint16, reg uint8, operan
 				cpu.setFlag(Carry, 0)
 			}
 		case Zero:
-			if result == 0 {
+			if uint8(result) == 0 {
 				cpu.setFlag(Zero, 1)
 			} else {
 				cpu.setFlag(Zero, 0)
 			}
 		case Overflow:
-			if ((uint8(result) ^ reg) & (uint8(result) ^ operand) & 0x80) == 1 {
+			if ((uint8(result) ^ reg) & (uint8(result) ^ operand) & 0x80) != 0 {
 				cpu.setFlag(Overflow, 1)
 			} else {
 				cpu.setFlag(Overflow, 0)
@@ -195,14 +213,135 @@ func (cpu *Cpu) TraceStatus() string {
 	for range 3 - size {
 		instructionHex += "   "
 	}
-	instructionHex += " "
+	if isIllegal(opcode) {
+		instructionHex += "*"
+	} else {
+		instructionHex += " "
+	}
+
 	instructionMnemonic := cpu.opcodeTable[opcode] + " "
-	instructionOp := getOperand(opcode)
-	return pc + instructionHex + instructionMnemonic
+	instructionOp := getOperand(opcode, cpu.Pc)
+	instructionOp = instructionOp + strings.Repeat(" ", 28-len(instructionOp))
+	registers := cpu.getRegisters()
+	return pc + instructionHex + instructionMnemonic + instructionOp + registers
 }
 
-func getOperand(opcode uint8) string {
+func (cpu *Cpu) RunAndTraceToFile(path string) {
+	file, err := os.OpenFile(path, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Println("runAndTraceToFile Could not open file! ", err)
+	}
+	defer file.Close()
+	var trace string
 
+	for {
+		if memory.MemRead(cpu.Pc) == 0x00 {
+			fmt.Println("BRK instruction found, stopping execution")
+			return
+		}
+		trace = cpu.TraceStatus()
+		file.WriteString(trace)
+		ExecuteNext()
+	}
+}
+
+func (cpu *Cpu) getRegisters() string {
+	return fmt.Sprintf("A:%02X X:%02X Y:%02X P:%02X SP:%02X", cpu.Acc, cpu.Xidx, cpu.Yidx, cpu.Psts, cpu.Sptr)
+}
+
+func getOperand(opcode uint8, pc uint16) string {
+	mnemonic := cpu.opcodeTable[opcode]
+	addresingMode := (opcode >> 2) & 0b00000111
+
+	// exceptions to the rule
+	switch mnemonic {
+	case BPL, BMI, BVC, BVS, BCC, BCS, BNE, BEQ:
+		address := uint16(int16(cpu.Pc) + int16(2) + int16(int8(memory.MemRead(cpu.Pc+1))))
+		return fmt.Sprintf("$%04X", address)
+	case BRK, RTI, RTS, PHP, PLP, PHA, PLA, DEY, TAY, INY, INX,
+		CLC, SEC, CLI, SEI, TYA, CLV, CLD, SED, TXA, TAX, DEX,
+		TXS, TSX, NOP:
+		return ""
+	}
+	switch opcode {
+	//   JMP
+	case 0x6C:
+		aluAddress, _ := cpu.getAluAddress(addresingMode)
+		var result uint16
+		if aluAddress&0x00FF == 0x00FF {
+			low := uint16(memory.MemRead(aluAddress))
+			high := uint16(memory.MemRead(aluAddress&0xFF00)) << 8
+			result = high + low
+		} else {
+			result = memory.MemRead16(aluAddress)
+		}
+		return fmt.Sprintf("($%04X) = %04X", memory.MemRead16(pc+1), result)
+	//   LDY   CPY   CPX   LDX
+	case 0xA0, 0xC0, 0xE0, 0xA2:
+		return fmt.Sprintf("#$%02X", memory.MemRead(pc+1))
+	//   JSR
+	case 0x20, 0x4C:
+		return fmt.Sprintf("$%04X", memory.MemRead16(pc+1))
+	//   ASL   ROL   LSR   ROR
+	case 0x0A, 0x2A, 0x4A, 0x6A:
+		return "A"
+	//   STX   LDX   SAX   LAX
+	case 0x96, 0xB6, 0x97, 0xB7:
+		address, _ := cpu.getAluAddressZeroPageY()
+		op, _ := cpu.getAluOperandZeroPageY()
+		return fmt.Sprintf("$%02X,Y @ %02X = %02X", memory.MemRead(pc+1), address, op)
+	}
+
+	switch addresingMode {
+	case idxindirectX:
+		nextByte := memory.MemRead(pc + 1)
+		address, _ := cpu.getAluAddress(idxindirectX)
+		op, _ := cpu.getAluOperand(idxindirectX)
+		return fmt.Sprintf("($%02X,X) @ %02X = %04X = %02X", nextByte, nextByte+cpu.Xidx, address, op)
+	case zeroPage:
+		op, _ := cpu.getAluOperand(zeroPage)
+		return fmt.Sprintf("$%02X = %02X", memory.MemRead(pc+1), op)
+	case immediate:
+		op, _ := cpu.getAluOperand(immediate)
+		return fmt.Sprintf("#$%02X", op)
+	case absolute:
+		address, _ := cpu.getAluAddress(absolute)
+		op, _ := cpu.getAluOperand(absolute)
+		return fmt.Sprintf("$%04X = %02X", address, op)
+	case indirectidxY:
+		nextByte := memory.MemRead(pc + 1)
+		prevAddress := memory.MemRead16(uint16(nextByte))
+		address, _ := cpu.getAluAddress(indirectidxY)
+		op, _ := cpu.getAluOperand(indirectidxY)
+		return fmt.Sprintf("($%02X),Y = %04X @ %04X = %02X", nextByte, prevAddress, address, op)
+	case zeroPageX:
+		address, _ := cpu.getAluAddress(zeroPageX)
+		op, _ := cpu.getAluOperand(zeroPageX)
+		return fmt.Sprintf("$%02X,X @ %02X = %02X", memory.MemRead(pc+1), address, op)
+	case absoluteY:
+		address, _ := cpu.getAluAddress(absoluteY)
+		op, _ := cpu.getAluOperand(absoluteY)
+		return fmt.Sprintf("$%04X,Y @ %04X = %02X", memory.MemRead16(pc+1), address, op)
+	case absoluteX:
+		address, _ := cpu.getAluAddress(absoluteX)
+		op, _ := cpu.getAluOperand(absoluteX)
+		return fmt.Sprintf("$%04X,X @ %04X = %02X", memory.MemRead16(pc+1), address, op)
+	}
+	return ""
+}
+
+func isIllegal(opcode uint8) bool {
+	mnemonic := cpu.opcodeTable[opcode]
+	switch mnemonic {
+	case SLO, ANC, RLA, SRE, ALR, RRA, SAX, SHA, SHX, SHY, TAS, LAX, LAS, DCP, AXS, ISC:
+		return true
+	}
+	// special case of SBC
+	if opcode == 0xEB {
+		return true
+	}
+
+	return false
 }
 
 func getInstructionSize(opcode uint8) uint8 {
@@ -219,7 +358,7 @@ func getInstructionSize(opcode uint8) uint8 {
 		}
 	case BRK, PHP, PLP, PHA, PLA, RTI, RTS, CLC, SEC,
 		CLI, SEI, CLV, CLD, SED, DEY, DEX, TYA, TXA,
-		TAY, TAX, INY, INX, TSX, TXS:
+		TAY, TAX, INY, INX, TSX, TXS, NOP:
 		return 1
 	case BPL, BMI, BVC, BVS, BCC, BCS, BNE, BEQ:
 		return 2
