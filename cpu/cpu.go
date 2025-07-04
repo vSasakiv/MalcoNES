@@ -105,8 +105,9 @@ func ExecuteNext() {
 	case ROL:
 		// has accumulator addressing
 		if instruction == 0x2A {
-			cpu.setFlag(Carry, cpu.Acc>>7)
-			result := (cpu.Acc << 1) + (cpu.Acc >> 7)
+			carry := (cpu.Acc & 0b10000000) >> 7
+			result := (cpu.Acc << 1) + cpu.getFlag(Carry)
+			cpu.setFlag(Carry, carry)
 			cpu.calcAndSetFlags([]string{Zero, Negative}, uint16(result), 0, 0)
 
 			cpu.Acc = result
@@ -114,8 +115,9 @@ func ExecuteNext() {
 		} else {
 			address, size := cpu.getAluAddress(addresingMode)
 			op := memory.MemRead(address)
-			cpu.setFlag(Carry, op>>7)
-			result := (op << 1) + (op >> 7)
+			carry := (op & 0b10000000) >> 7
+			result := (op << 1) + cpu.getFlag(Carry)
+			cpu.setFlag(Carry, carry)
 			cpu.calcAndSetFlags([]string{Zero, Negative}, uint16(result), 0, 0)
 
 			memory.MemWrite(address, result)
@@ -152,8 +154,8 @@ func ExecuteNext() {
 			cpu.Pc += 1
 		} else {
 			address, size := cpu.getAluAddress(addresingMode)
-			carry := cpu.Acc & 0b1
 			op := memory.MemRead(address)
+			carry := op & 0b1
 			result := (op >> 1) + (cpu.getFlag(Carry) << 7)
 			cpu.setFlag(Carry, carry)
 			cpu.calcAndSetFlags([]string{Zero, Negative}, uint16(result), 0, 0)
@@ -180,16 +182,20 @@ func ExecuteNext() {
 		result := (op<<1 | cpu.Acc)
 		cpu.calcAndSetFlags([]string{Zero, Negative}, uint16(result), 0, 0)
 
-		memory.MemWrite(address, result)
+		memory.MemWrite(address, op<<1)
+		cpu.Acc = result
 		cpu.Pc += uint16(size)
 	case RLA:
 		address, size := cpu.getAluAddress(addresingMode)
 		op := memory.MemRead(address)
-		cpu.setFlag(Carry, op>>7)
-		result := ((op << 1) + (op >> 7)) & cpu.Acc
+		carry := (op & 0b10000000) >> 7
+		mem := (op << 1) + cpu.getFlag(Carry)
+		result := mem & cpu.Acc
+		cpu.setFlag(Carry, carry)
 		cpu.calcAndSetFlags([]string{Zero, Negative}, uint16(result), 0, 0)
 
-		memory.MemWrite(address, result)
+		memory.MemWrite(address, mem)
+		cpu.Acc = result
 		cpu.Pc += uint16(size)
 	case SRE:
 		address, size := cpu.getAluAddress(addresingMode)
@@ -198,17 +204,19 @@ func ExecuteNext() {
 		result := (op >> 1) ^ cpu.Acc
 		cpu.calcAndSetFlags([]string{Zero, Negative}, uint16(result), 0, 0)
 
-		memory.MemWrite(address, result)
+		memory.MemWrite(address, op>>1)
+		cpu.Acc = result
 		cpu.Pc += uint16(size)
 	case RRA:
 		address, size := cpu.getAluAddress(addresingMode)
 		op := memory.MemRead(address)
-		cpu.setFlag(Carry, op&0b1)
-		rotateResult := (op >> 1) + (op << 7)
-		cpu.calcAndSetFlags([]string{Zero, Negative}, uint16(rotateResult), 0, 0)
+		carry := op & 0b1
+		mem := (op >> 1) + (cpu.getFlag(Carry) << 7)
+		cpu.setFlag(Carry, carry)
 
-		var result uint16 = uint16(cpu.Acc) + uint16(rotateResult) + uint16(cpu.getFlag(Carry))
-		cpu.calcAndSetFlags([]string{Carry, Zero, Overflow, Negative}, result, cpu.Acc, op)
+		var result uint16 = uint16(cpu.Acc) + uint16(mem) + uint16(cpu.getFlag(Carry))
+		cpu.calcAndSetFlags([]string{Carry, Zero, Overflow, Negative}, result, cpu.Acc, mem)
+		memory.MemWrite(address, mem)
 		cpu.Acc = uint8(result)
 		cpu.Pc += uint16(size)
 	case SAX:
@@ -220,7 +228,7 @@ func ExecuteNext() {
 		} else {
 			aluAddress, size = cpu.getAluAddress(addresingMode)
 		}
-		result := cpu.Xidx + cpu.Acc
+		result := cpu.Xidx & cpu.Acc
 		memory.MemWrite(aluAddress, result)
 		cpu.Pc += uint16(size)
 	case LAX:
@@ -229,6 +237,9 @@ func ExecuteNext() {
 		var size uint8
 		if addresingMode == zeroPageY {
 			op, size = cpu.getAluOperandZeroPageY()
+		} else if instruction == 0xBF {
+			// absolute Y
+			op, size = cpu.getAluOperand(absoluteY)
 		} else {
 			op, size = cpu.getAluOperand(addresingMode)
 		}
@@ -243,7 +254,7 @@ func ExecuteNext() {
 		memory.MemWrite(address, result)
 		cpu.setCompareFlags(result, cpu.Acc)
 		cpu.Pc += uint16(size)
-	case ISC:
+	case ISB:
 		address, size := cpu.getAluAddress(addresingMode)
 		result := memory.MemRead(address) + 1
 		cpu.calcAndSetFlags([]string{Zero, Negative}, uint16(result), 0, 0)
@@ -475,6 +486,9 @@ func ExecuteNext() {
 		var op, size uint8
 		if instruction == 0xA2 {
 			op, size = cpu.getAluOperand(immediate)
+		} else if instruction == 0xBE {
+			// absolute Y
+			op, size = cpu.getAluOperand(absoluteY)
 		} else if addresingMode == zeroPageY {
 			op, size = cpu.getAluOperandZeroPageY()
 		} else {
@@ -527,6 +541,17 @@ func ExecuteNext() {
 		cpu.Sptr = cpu.Xidx
 		cpu.Pc += 1
 	case NOP:
-		cpu.Pc += 1
+		switch instruction {
+		// implict nops size 1
+		case 0xEA, 0x1A, 0x3A, 0x5A, 0x7A, 0xDA, 0xFA:
+			cpu.Pc += 1
+		// immediate nops size 2
+		case 0x80, 0x82, 0xC2, 0xE2:
+			cpu.Pc += 2
+		// remaining nops, size dependent on addressing
+		default:
+			_, size := cpu.getAluOperand(addresingMode)
+			cpu.Pc += uint16(size)
+		}
 	}
 }

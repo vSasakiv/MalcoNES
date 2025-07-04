@@ -239,7 +239,7 @@ func (cpu *Cpu) RunAndTraceToFile(path string) {
 			fmt.Println("BRK instruction found, stopping execution")
 			return
 		}
-		trace = cpu.TraceStatus()
+		trace = cpu.TraceStatus() + "\n"
 		file.WriteString(trace)
 		ExecuteNext()
 	}
@@ -260,7 +260,7 @@ func getOperand(opcode uint8, pc uint16) string {
 		return fmt.Sprintf("$%04X", address)
 	case BRK, RTI, RTS, PHP, PLP, PHA, PLA, DEY, TAY, INY, INX,
 		CLC, SEC, CLI, SEI, TYA, CLV, CLD, SED, TXA, TAX, DEX,
-		TXS, TSX, NOP:
+		TXS, TSX:
 		return ""
 	}
 	switch opcode {
@@ -290,6 +290,18 @@ func getOperand(opcode uint8, pc uint16) string {
 		address, _ := cpu.getAluAddressZeroPageY()
 		op, _ := cpu.getAluOperandZeroPageY()
 		return fmt.Sprintf("$%02X,Y @ %02X = %02X", memory.MemRead(pc+1), address, op)
+	//   LDX   SHX   SHA   LAX
+	case 0xBE, 0x9E, 0x9F, 0xBF:
+		address, _ := cpu.getAluAddress(absoluteY)
+		op, _ := cpu.getAluOperand(absoluteY)
+		return fmt.Sprintf("$%04X,Y @ %04X = %02X", memory.MemRead16(pc+1), address, op)
+	//   size 1 nops
+	case 0xEA, 0x1A, 0x3A, 0x5A, 0x7A, 0xDA, 0xFA:
+		return ""
+	//   size 2 immediate nops
+	case 0x80, 0x82, 0xC2, 0xE2:
+		op, _ := cpu.getAluOperand(immediate)
+		return fmt.Sprintf("#$%02X", op)
 	}
 
 	switch addresingMode {
@@ -333,8 +345,13 @@ func getOperand(opcode uint8, pc uint16) string {
 func isIllegal(opcode uint8) bool {
 	mnemonic := cpu.opcodeTable[opcode]
 	switch mnemonic {
-	case SLO, ANC, RLA, SRE, ALR, RRA, SAX, SHA, SHX, SHY, TAS, LAX, LAS, DCP, AXS, ISC:
+	case SLO, ANC, RLA, SRE, ALR, RRA, SAX, SHA, SHX, SHY, TAS, LAX, LAS, DCP, AXS, ISB:
 		return true
+	case NOP:
+		// special case of NOP
+		if opcode != 0xEA {
+			return true
+		}
 	}
 	// special case of SBC
 	if opcode == 0xEB {
@@ -349,6 +366,19 @@ func getInstructionSize(opcode uint8) uint8 {
 	addresingMode := (opcode >> 2) & 0b00000111
 
 	switch mnemonic {
+	case NOP:
+		switch opcode {
+		// implict nops size 1
+		case 0xEA, 0x1A, 0x3A, 0x5A, 0x7A, 0xDA, 0xFA:
+			return 1
+		// immediate nops size 2
+		case 0x80, 0x82, 0xC2, 0xE2:
+			return 2
+		// remaining nops, size dependent on addressing
+		default:
+			_, size := cpu.getAluOperand(addresingMode)
+			return size
+		}
 	case ASL, ROL, LSR, ROR:
 		if opcode == 0x0A || opcode == 0x2A || opcode == 0x4A || opcode == 0x6A {
 			return 1
@@ -358,7 +388,7 @@ func getInstructionSize(opcode uint8) uint8 {
 		}
 	case BRK, PHP, PLP, PHA, PLA, RTI, RTS, CLC, SEC,
 		CLI, SEI, CLV, CLD, SED, DEY, DEX, TYA, TXA,
-		TAY, TAX, INY, INX, TSX, TXS, NOP:
+		TAY, TAX, INY, INX, TSX, TXS:
 		return 1
 	case BPL, BMI, BVC, BVS, BCC, BCS, BNE, BEQ:
 		return 2

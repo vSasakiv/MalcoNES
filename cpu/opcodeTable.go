@@ -23,7 +23,7 @@ const RRA = "RRA"
 const SAX = "SAX"
 const LAX = "LAX"
 const DCP = "DCP"
-const ISC = "ISC"
+const ISB = "ISB"
 const ANC = "ANC"
 const ALR = "ALR"
 const ARR = "ARR"
@@ -189,6 +189,7 @@ func Generate() map[uint8]string {
 		0x1F: SLO,
 		0x03: SLO,
 		0x13: SLO,
+		0x1B: SLO,
 
 		0x27: RLA,
 		0x37: RLA,
@@ -196,6 +197,7 @@ func Generate() map[uint8]string {
 		0x3F: RLA,
 		0x23: RLA,
 		0x33: RLA,
+		0x3B: RLA,
 
 		0x47: SRE,
 		0x57: SRE,
@@ -203,6 +205,7 @@ func Generate() map[uint8]string {
 		0x5F: SRE,
 		0x43: SRE,
 		0x53: SRE,
+		0x5B: SRE,
 
 		0x67: RRA,
 		0x77: RRA,
@@ -210,6 +213,7 @@ func Generate() map[uint8]string {
 		0x7F: RRA,
 		0x63: RRA,
 		0x73: RRA,
+		0x7B: RRA,
 
 		0x87: SAX,
 		0x97: SAX,
@@ -236,13 +240,13 @@ func Generate() map[uint8]string {
 		0xC3: DCP,
 		0xD3: DCP,
 
-		0xE7: ISC,
-		0xF7: ISC,
-		0xEF: ISC,
-		0xFF: ISC,
-		0xFB: ISC,
-		0xE3: ISC,
-		0xF3: ISC,
+		0xE7: ISB,
+		0xF7: ISB,
+		0xEF: ISB,
+		0xFF: ISB,
+		0xFB: ISB,
+		0xE3: ISB,
+		0xF3: ISB,
 
 		0x0B: ANC,
 		0x2B: ANC,

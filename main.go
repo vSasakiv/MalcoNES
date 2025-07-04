@@ -18,10 +18,10 @@ func main() {
 	// cpu.printStatus()
 	// cpu.executeNext()
 	// cpu.printStatus()
-	// time.AfterFunc(1*time.Second, func() {
-	// 	fmt.Println("Time limit reached. Exiting program.")
-	// 	os.Exit(0) // Exit with a success status
-	// })
+	// cpu.GetCpu().Pc = 0xC000
+	// nestest := cartridge.ReadFromFile("./testFiles/nestest.nes")
+	// memory.LoadFromCartridge(nestest)
+	// cpu.GetCpu().RunAndTraceToFile("mylog.log")
 
 	NesTestLineByLine()
 }
