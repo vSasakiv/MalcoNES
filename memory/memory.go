@@ -4,13 +4,26 @@ import (
 	"fmt"
 	"os"
 	"vsasakiv/nesemulator/cartridge"
+	"vsasakiv/nesemulator/ppu"
 )
 
-// type Memory [0xFFFF]uint8
+// PPU registers mapped to CPU
+const PPUCTRL = 0x2000
+const PPUMASK = 0x2001
+const PPUSTATUS = 0x2002
+const OAMADDR = 0x2003
+const OAMDATA = 0x2004
+const PPUSCROLL = 0x2005
+const PPUADDR = 0x2006
+const PPUDATA = 0x2007
 
 type Memory struct {
-	ram [0x0800]uint8
-	rom cartridge.Cartridge
+	ram             [0x0800]uint8
+	rom             cartridge.Cartridge
+	vram            [0x1000]uint8
+	paletteRam      [0x0100]uint8
+	OamDmaInterrupt bool
+	OamDmaPage      uint8
 }
 
 var MainMemory Memory
@@ -28,6 +41,18 @@ func MemRead(addr uint16) uint8 {
 	switch {
 	case addr <= 0x07FF:
 		return MainMemory.ram[addr]
+	// ppu registers mapped to cpu memory
+	case addr >= 0x2000 && addr <= 0x3FFF:
+		addr = ((addr - 0x2000) % 0x0008) + 0x2000
+		switch addr {
+		case OAMDATA:
+			return ppu.GetPpu().ReadOamDataRegister()
+		case PPUDATA:
+			return ppu.GetPpu().ReadPpuDataRegister()
+		}
+	// OAMDMA returns placeholder 0x40
+	case addr == 0x4014:
+		return 0x40
 	case addr >= 0x8000:
 		return readPrgRom(addr)
 	}
@@ -57,11 +82,36 @@ func MemRead16(addr uint16) uint16 {
 
 func MemWrite(addr uint16, val uint8) {
 	switch {
+	// cpu RAM
 	case addr <= 0x07FF:
 		if debug {
 			modified.ram[addr] = 1
 		}
 		MainMemory.ram[addr] = val
+	// ppu registers mapped to cpu memory
+	case addr >= 0x2000 && addr <= 0x3FFF:
+		addr = ((addr - 0x2000) % 0x0008) + 0x2000
+		switch addr {
+		case PPUCTRL:
+			ppu.GetPpu().WriteToPpuControl(val)
+		case PPUMASK:
+			ppu.GetPpu().WriteToPpuMask(val)
+		case PPUSCROLL:
+			ppu.GetPpu().WriteToPpuScroll(val)
+		case OAMADDR:
+			ppu.GetPpu().WriteToOamAddrRegister(val)
+		case OAMDATA:
+			ppu.GetPpu().WriteToOamDataRegister(val)
+		case PPUADDR:
+			ppu.GetPpu().WriteToAddrRegister(val)
+		case PPUDATA:
+			ppu.GetPpu().WriteToPpuDataRegister(val)
+		}
+	// OAMDMA, using interrupt
+	case addr == 0x4014:
+		MainMemory.OamDmaInterrupt = true
+		MainMemory.OamDmaPage = val
+	// prg rom
 	case addr >= 0x8000:
 		fmt.Println("Warning: cant write to ROM")
 		return
@@ -90,6 +140,14 @@ func readPrgRom(addr uint16) uint8 {
 		addr = addr % 0x4000
 	}
 	return MainMemory.rom.PrgRom[addr]
+}
+
+func PoolOamDmaInterrupt() bool {
+	if MainMemory.OamDmaInterrupt {
+		MainMemory.OamDmaInterrupt = false
+		return true
+	}
+	return false
 }
 
 func HexDump(filename string) {

@@ -1,0 +1,221 @@
+package ppu
+
+// ppu control settings
+const NAMETABLE_ADDRESS = "NAMETABLE_ADDRESS"
+const INCREMENT = "INCREMENT"
+const SPRITE_TABLE_ADDRESS = "SPRITE_TABLE_ADDRESS"
+const BACKGROUND_TABLE_ADDRESS = "BACKGROUND_TABLE_ADDRESS"
+const SPRITE_SIZE = "SPRITE_SIZE"
+const VBLANK_NMI_ENABLE = "VBLANK_NMI_ENABLE"
+
+// ppu mask settings
+const GREYSCALE = "GREYSCALE"
+const SHOW_BACKGROUND_LEFT = "SHOW_BACKGROUND_LEFT"
+const SHOW_SPRITES_LEFT = "SHOW_SPRITES_LEFT"
+const ENABLE_BACKGROUND = "ENABLE_BACKGROUND"
+const ENABLE_SPRITE = "ENABLE_SPRITE"
+const RED = "RED"
+const GREEN = "GREEN"
+const BLUE = "BLUE"
+
+type Ppu struct {
+	// internal registers
+	currentAddress uint16
+	tempAddress    uint16
+	fineXScroll    uint8
+	writeToggle    bool
+	// register mapped to cpu memory
+	ppuAddr    uint16
+	ppuCtrl    uint8
+	ppuMask    uint8
+	ppuStatus  uint8
+	ppuScrollX uint8
+	ppuScrollY uint8
+	ppuOamAddr uint8
+	ppuOamData uint8
+	// internal buffers
+	readBuffer uint8
+	// simulation clock cycles and scanlines
+	cycles    uint
+	scanlines uint
+	// nmi interrupt signal
+	NmiInterrupt bool
+	// color palette
+	systemPalette map[uint8][3]uint8
+}
+
+// Initialize cpu with corret parameters, also initialize instructionTable
+func NewPpu() *Ppu {
+	var ppu Ppu
+	ppu.systemPalette = GenerateFromPalFile("./ppu/palettes/2C02.pal")
+	return &ppu
+}
+
+func GetPpu() *Ppu {
+	return &ppu
+}
+
+var ppu Ppu = *NewPpu()
+
+func Execute(cycles uint) {
+	ppu.cycles += cycles
+	if cycles >= 341 {
+		ppu.cycles -= 341
+		ppu.scanlines += 1
+
+		// Vblank, send NMI interrupt if enabled and set flag
+		if ppu.scanlines >= 241 {
+			if ppu.getControlSetting(VBLANK_NMI_ENABLE) == 1 {
+				ppu.setVblankStatus(1)
+				ppu.NmiInterrupt = true
+			}
+		}
+		if ppu.scanlines >= 262 {
+			ppu.setVblankStatus(0)
+			ppu.NmiInterrupt = false
+			ppu.scanlines = 0
+		}
+	}
+}
+
+func (ppu *Ppu) PollForNmiInterrupt() bool {
+	if ppu.NmiInterrupt {
+		ppu.NmiInterrupt = false
+		return true
+	}
+	return false
+}
+
+func (ppu *Ppu) WriteToAddrRegister(val uint8) {
+	// write to high/low byte
+	if ppu.writeToggle {
+		ppu.ppuAddr = uint16(val)&0xFF00 | ppu.ppuAddr&0x00FF
+	} else {
+		ppu.ppuAddr = uint16(val)&0x00FF | ppu.ppuAddr&0xFF00
+	}
+	// loops value back arround to first address
+	if ppu.ppuAddr > 0x3FFF {
+		ppu.ppuAddr = ppu.ppuAddr & 0b1111111_1111111
+	}
+	ppu.writeToggle = !ppu.writeToggle
+}
+
+func (ppu *Ppu) incrementAddrRegister() {
+	var increment uint16
+	if ppu.getControlSetting(INCREMENT) == 0 {
+		increment = 1
+	} else {
+		increment = 32
+	}
+	ppu.ppuAddr += increment
+	// loops value back arround to first address
+	if ppu.ppuAddr > 0x3FFF {
+		ppu.ppuAddr = ppu.ppuAddr & 0b1111111_1111111
+	}
+}
+
+func (ppu *Ppu) WriteToPpuControl(val uint8) {
+	if (val>>7)&0b1 == 1 && (ppu.ppuCtrl>>7)&0b1 == 0 && (ppu.ppuStatus>>7)&0b1 == 1 {
+		ppu.NmiInterrupt = true
+	}
+	ppu.ppuCtrl = val
+}
+
+func (ppu *Ppu) getControlSetting(setting string) uint8 {
+	switch setting {
+	case NAMETABLE_ADDRESS:
+		return ppu.ppuCtrl & 0b11
+	case INCREMENT:
+		return (ppu.ppuCtrl >> 2) & 0b1
+	case SPRITE_TABLE_ADDRESS:
+		return (ppu.ppuCtrl >> 3) & 0b1
+	case BACKGROUND_TABLE_ADDRESS:
+		return (ppu.ppuCtrl >> 4) & 0b1
+	case SPRITE_SIZE:
+		return (ppu.ppuCtrl >> 5) & 0b1
+	case VBLANK_NMI_ENABLE:
+		return (ppu.ppuCtrl >> 7) & 0b1
+	}
+	return 0
+}
+
+func (ppu *Ppu) ReadPpuDataRegister() uint8 {
+	// increment address after everything
+	defer ppu.incrementAddrRegister()
+
+	// if it is pallete ram, return the value instantly
+	if ppu.ppuAddr >= 0x3F00 {
+		return PpuMemRead(ppu.ppuAddr)
+	}
+	result := ppu.readBuffer
+	ppu.readBuffer = PpuMemRead(ppu.ppuAddr)
+	return result
+}
+
+func (ppu *Ppu) WriteToPpuDataRegister(val uint8) {
+	// increment address after everything
+	defer ppu.incrementAddrRegister()
+	PpuMemWrite(ppu.ppuAddr, val)
+}
+
+func (ppu *Ppu) WriteToPpuMask(val uint8) {
+	ppu.ppuMask = val
+}
+
+func (ppu *Ppu) getMaskSetting(setting string) uint8 {
+	switch setting {
+	case GREYSCALE:
+		return ppu.ppuMask & 0b1
+	case SHOW_BACKGROUND_LEFT:
+		return (ppu.ppuMask >> 1) & 0b1
+	case SHOW_SPRITES_LEFT:
+		return (ppu.ppuMask >> 2) & 0b1
+	case ENABLE_BACKGROUND:
+		return (ppu.ppuMask >> 3) & 0b1
+	case ENABLE_SPRITE:
+		return (ppu.ppuMask >> 4) & 0b1
+	case RED:
+		return (ppu.ppuMask >> 5) & 0b1
+	case GREEN:
+		return (ppu.ppuMask >> 6) & 0b1
+	case BLUE:
+		return (ppu.ppuMask >> 7) & 0b1
+	}
+	return 0
+}
+
+func (ppu *Ppu) WriteToOamAddrRegister(val uint8) {
+	ppu.ppuOamAddr = val
+}
+
+func (ppu *Ppu) WriteToOamDataRegister(val uint8) {
+	PpuOamWrite(ppu.ppuOamAddr, val)
+	ppu.ppuOamAddr += 1
+}
+
+func (ppu *Ppu) ReadOamDataRegister() uint8 {
+	return PpuOamRead(ppu.ppuOamAddr)
+}
+
+func (ppu *Ppu) ReadPpuStatusRegister() uint8 {
+	ppu.writeToggle = false
+	ppu.setVblankStatus(0)
+	return ppu.ppuStatus
+}
+
+func (ppu *Ppu) WriteToPpuScroll(val uint8) {
+	if ppu.writeToggle {
+		ppu.ppuScrollX = val
+	} else {
+		ppu.ppuScrollY = val
+	}
+	ppu.writeToggle = !ppu.writeToggle
+}
+
+func (ppu *Ppu) setVblankStatus(val uint8) {
+	if val == 1 {
+		ppu.ppuStatus |= 1 << 7
+	} else {
+		ppu.ppuStatus &^= 1 << 7
+	}
+}

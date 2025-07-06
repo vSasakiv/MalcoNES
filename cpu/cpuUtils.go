@@ -1,10 +1,13 @@
 package cpu
 
 import (
+	"bufio"
 	"fmt"
 	"log"
 	"os"
+	"slices"
 	"strings"
+	"vsasakiv/nesemulator/cartridge"
 	"vsasakiv/nesemulator/memory"
 )
 
@@ -129,7 +132,7 @@ func (cpu *Cpu) getFlag(flag string) uint8 {
 	}
 }
 
-// Receivesa list with all the that should be set by the instruction
+// Receives a list with all the flags that should be set by the instruction
 func (cpu *Cpu) calcAndSetFlags(flags []string, result uint16, reg uint8, operand uint8) {
 	for _, flag := range flags {
 		switch flag {
@@ -182,7 +185,7 @@ func (cpu *Cpu) pullFromStack16() uint16 {
 	return (uint16(high) << 8) + uint16(low)
 }
 
-// executes simples branch branch if flag is equal to val
+// executes simple branch if flag is equal to val
 func (cpu *Cpu) branchIfFlag(flag string, val uint8) {
 	if cpu.getFlag(flag) == val {
 		cpu.Pc = uint16(int16(cpu.Pc) + int16(2) + int16(int8(memory.MemRead(cpu.Pc+1))))
@@ -191,6 +194,7 @@ func (cpu *Cpu) branchIfFlag(flag string, val uint8) {
 	}
 }
 
+// sets the flags when calling a compare instruction
 func (cpu *Cpu) setCompareFlags(operand uint8, reg uint8) {
 	var result uint8 = reg - operand
 	cpu.calcAndSetFlags([]string{Zero, Negative}, uint16(result), 0, 0)
@@ -201,6 +205,7 @@ func (cpu *Cpu) setCompareFlags(operand uint8, reg uint8) {
 	}
 }
 
+// ----- functions for tracing the execution of the CPU -----
 func (cpu *Cpu) TraceStatus() string {
 	opcode := memory.MemRead(cpu.Pc)
 
@@ -222,10 +227,171 @@ func (cpu *Cpu) TraceStatus() string {
 	instructionMnemonic := cpu.opcodeTable[opcode] + " "
 	instructionOp := getOperand(opcode, cpu.Pc)
 	instructionOp = instructionOp + strings.Repeat(" ", 28-len(instructionOp))
-	registers := cpu.getRegisters()
-	return pc + instructionHex + instructionMnemonic + instructionOp + registers
+	registers := cpu.getRegisters() + " "
+	cycles := fmt.Sprintf("CYC:%d", cpu.cycles)
+	return pc + instructionHex + instructionMnemonic + instructionOp + registers + cycles
 }
 
+// given an instruction, calculates the ammount of cycles it takes
+// it considers the extra cycles for page crossing instructions
+func (cpu *Cpu) calcCycles(opcode uint8, mnemonic string, addressingMode uint8) uint {
+	switch mnemonic {
+	case ADC, AND, CMP, EOR, LDA, ORA, SBC, BIT, STA, STX, STY,
+		LDX, LDY, CPX, CPY, LAX, SAX, DCP, ISB, SLO, RLA, SRE, RRA:
+		var cycles uint
+
+		if opcode == 0xA0 || opcode == 0xC0 || opcode == 0xE0 || opcode == 0xA2 {
+			return 2
+		}
+
+		switch mnemonic {
+		case DCP, ISB, SLO, RLA, SRE, RRA:
+			cycles = 4 + cyclesPerAddressingMode(addressingMode)
+		default:
+			cycles = 2 + cyclesPerAddressingMode(addressingMode)
+		}
+
+		if cpu.isPageCrossed(addressingMode, mnemonic) {
+			return cycles + 1
+		}
+		return cycles
+	case ASL, DEC, INC, LSR, ROL, ROR:
+		// accumulator mode
+		if opcode == 0x0A || opcode == 0x2A || opcode == 0x4A || opcode == 0x6A {
+			return 2
+		}
+		cycles := 4 + cyclesPerAddressingMode(addressingMode)
+		if cpu.isPageCrossed(addressingMode, mnemonic) {
+			return cycles + 1
+		}
+		return cycles
+	case JMP:
+		if opcode == 0x4C {
+			return 3
+		} else {
+			return 5
+		}
+	// branches
+	case BPL:
+		return cpu.branchCycles(Negative, 0)
+	case BMI:
+		return cpu.branchCycles(Negative, 1)
+	case BVC:
+		return cpu.branchCycles(Overflow, 0)
+	case BVS:
+		return cpu.branchCycles(Overflow, 1)
+	case BCC:
+		return cpu.branchCycles(Carry, 0)
+	case BCS:
+		return cpu.branchCycles(Carry, 1)
+	case BNE:
+		return cpu.branchCycles(Zero, 0)
+	case BEQ:
+		return cpu.branchCycles(Zero, 1)
+
+	case TAX, TXA, DEX, INX, TAY, TYA, DEY, INY, CLC, SEC, CLI, SEI, CLV, CLD, SED, TSX, TXS:
+		return 2
+	case PHP, PHA:
+		return 3
+	case PLA, PLP:
+		return 4
+	case JSR, RTI, RTS:
+		return 6
+	case NOP:
+		switch opcode {
+		// implict nops size 1
+		case 0xEA, 0x1A, 0x3A, 0x5A, 0x7A, 0xDA, 0xFA:
+			return 2
+		// immediate nops size 2
+		case 0x80, 0x82, 0xC2, 0xE2:
+			return 2
+		default:
+			cycles := 2 + cyclesPerAddressingMode(addressingMode)
+			if cpu.isPageCrossed(addressingMode, mnemonic) {
+				return cycles + 1
+			}
+			return cycles
+		}
+	}
+	return 0
+}
+
+// returns the ammount of extra cycles added by each addressing mode
+func cyclesPerAddressingMode(addressingMode uint8) uint {
+	switch addressingMode {
+	case idxindirectX:
+		return 4
+	case zeroPage:
+		return 1
+	case immediate:
+		return 0
+	case absolute:
+		return 2
+	case indirectidxY:
+		return 3
+	case zeroPageX:
+		return 2
+	case absoluteY:
+		return 2
+	case absoluteX:
+		return 2
+	default:
+		return 0
+	}
+}
+
+// calculates total cycles of branch instructions, 2 if not taken
+// 3 if taken, and 4 if taken and has page cross
+func (cpu *Cpu) branchCycles(flag string, val uint8) uint {
+	if cpu.getFlag(flag) == val {
+		address := uint16(int16(cpu.Pc) + int16(2) + int16(int8(memory.MemRead(cpu.Pc+1))))
+		if address&0xFF00 != (cpu.Pc+uint16(2))&0xFF00 {
+			// taken and page crossed
+			return 4
+		}
+		// taken and page uncrossed
+		return 3
+	}
+	// not taken 2 cycles
+	return 2
+}
+
+// verifies if an instruction takes an extra cycle because of
+// page crossing
+func (cpu *Cpu) isPageCrossed(addressingMode uint8, mnemonic string) bool {
+	switch addressingMode {
+	case indirectidxY, absoluteY:
+		address, _ := cpu.getAluAddress(addressingMode)
+		prevAddress := address - uint16(cpu.Yidx)
+		if address&0xFF00 != prevAddress&0xFF00 {
+			return true
+		} else if mnemonic == STA {
+			return true
+		}
+	case absoluteX:
+		var address uint16
+		var prevAddress uint16
+		// uses absY instead of absX
+		if mnemonic == LDX || mnemonic == SHX || mnemonic == SHA || mnemonic == LAX {
+			address, _ = cpu.getAluAddress(absoluteY)
+			prevAddress = address - uint16(cpu.Yidx)
+		} else {
+			address, _ = cpu.getAluAddress(addressingMode)
+			prevAddress = address - uint16(cpu.Xidx)
+		}
+		if address&0xFF00 != prevAddress&0xFF00 {
+			return true
+		}
+		switch mnemonic {
+		// mnemonics where absX always takes extra cycle
+		case STA, LSR, ASL, DEC, INC, ROL, ROR:
+			return true
+		}
+	}
+	return false
+}
+
+// traces cpu execution to a file
 func (cpu *Cpu) RunAndTraceToFile(path string) {
 	file, err := os.OpenFile(path, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -397,4 +563,55 @@ func getInstructionSize(opcode uint8) uint8 {
 	}
 	_, size := cpu.getAluAddress(addresingMode)
 	return size
+}
+
+func NesTestLineByLine() {
+
+	file, err := os.Open("./testFiles/nestest.log")
+	if err != nil {
+		fmt.Println("Error opening nestest.log!", err)
+		return
+	}
+	defer file.Close()
+
+	nestest := cartridge.ReadFromFile("./testFiles/nestest.nes")
+	memory.LoadFromCartridge(nestest)
+	cpu.Pc = 0xC000
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		logTrace := line[:73] + " " + line[86:]
+		cpuTrace := cpu.TraceStatus()
+
+		if logTrace != cpuTrace {
+			errorLog := generateErrorLog(logTrace, cpuTrace)
+			fmt.Printf("%s", errorLog)
+			return
+		}
+		ExecuteNext()
+	}
+}
+
+func generateErrorLog(logTrace string, cpuTrace string) string {
+	var diff []int
+	errorLog := ""
+
+	for i := range cpuTrace {
+		if logTrace[i] != cpuTrace[i] {
+			diff = append(diff, i)
+		}
+	}
+
+	errorLog += logTrace + "\n"
+	for i := range cpuTrace {
+		if slices.Contains(diff, i) {
+			errorLog += "^"
+		} else {
+			errorLog += " "
+		}
+	}
+	errorLog += "\n"
+	errorLog += cpuTrace + "\n"
+	return errorLog
 }

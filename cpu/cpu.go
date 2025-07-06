@@ -2,6 +2,7 @@ package cpu
 
 import (
 	"vsasakiv/nesemulator/memory"
+	"vsasakiv/nesemulator/ppu"
 )
 
 const Carry = "C"
@@ -15,6 +16,8 @@ type Cpu struct {
 	Pc                          uint16
 	Acc, Xidx, Yidx, Sptr, Psts uint8
 	opcodeTable                 map[uint8]string
+	cycles                      uint
+	LastInstructionCycles       uint
 }
 
 // Initialize cpu with corret parameters, also initialize instructionTable
@@ -23,6 +26,7 @@ func NewCpu() *Cpu {
 	cpu.Psts = 0b00100100
 	cpu.Sptr = 0xFD
 	cpu.opcodeTable = Generate()
+	cpu.cycles = 7
 	return &cpu
 }
 
@@ -33,10 +37,20 @@ func GetCpu() *Cpu {
 var cpu Cpu = *NewCpu()
 
 func ExecuteNext() {
+	if ppu.GetPpu().PollForNmiInterrupt() {
+		cpu.treatNmiInterrupt()
+		return
+	}
+	if memory.PoolOamDmaInterrupt() {
+		cpu.OamDmaWrite(memory.MainMemory.OamDmaPage)
+		return
+	}
+
 	instruction := memory.MemRead(cpu.Pc)
 	opcode := cpu.opcodeTable[instruction]
 	addresingMode := (instruction >> 2) & 0b00000111
-
+	cpu.LastInstructionCycles = cpu.calcCycles(instruction, opcode, addresingMode)
+	cpu.cycles += cpu.LastInstructionCycles
 	switch opcode {
 	// Accumulator instructions
 	case ADC:
@@ -430,7 +444,7 @@ func ExecuteNext() {
 			cpu.Pc = aluAddress
 		}
 
-		// index register manipulating instructions
+	// index register manipulating instructions
 	case STY:
 		aluAddress, size := cpu.getAluAddress(addresingMode)
 		memory.MemWrite(aluAddress, cpu.Yidx)
@@ -554,4 +568,22 @@ func ExecuteNext() {
 			cpu.Pc += uint16(size)
 		}
 	}
+}
+
+// treats NMI interrupt, pushes context to stack, jump to vector
+func (cpu *Cpu) treatNmiInterrupt() {
+	cpu.pushToStack16(cpu.Pc)
+	cpu.pushToStack(cpu.Psts & 0b11101111)
+
+	cpu.setFlag(InterruptDisable, 1)
+	cpu.LastInstructionCycles = 7
+	cpu.Pc = memory.MemRead16(0xFFFA)
+}
+
+func (cpu *Cpu) OamDmaWrite(page uint8) {
+	for i := range uint16(256) {
+		val := memory.MemRead((uint16(page) << 8) + i)
+		memory.MemWrite(memory.OAMDATA, val)
+	}
+	cpu.LastInstructionCycles = 314
 }
