@@ -3,6 +3,7 @@ package main
 import (
 	"unsafe"
 	"vsasakiv/nesemulator/cartridge"
+	"vsasakiv/nesemulator/controller"
 	"vsasakiv/nesemulator/cpu"
 	"vsasakiv/nesemulator/memory"
 	"vsasakiv/nesemulator/ppu"
@@ -12,15 +13,22 @@ import (
 
 const CPUCLOCK = 21441960
 
+var running bool
+
 func main() {
 	runEmulator()
 }
 
 func runEmulator() {
-	nestest := cartridge.ReadFromFile("./testFiles/supermario.nes")
+
+	nestest := cartridge.ReadFromFile("./testFiles/pacman.nes")
+
 	memory.LoadFromCartridge(nestest)
+
 	ppu.LoadFromCartridge(nestest)
 	cpu.GetCpu().Reset()
+	joyPad := controller.NewJoypad()
+	memory.ConnectJoyPad1(joyPad)
 
 	if err := sdl.Init(sdl.INIT_EVERYTHING); err != nil {
 		panic(err)
@@ -40,7 +48,7 @@ func runEmulator() {
 	}
 	defer renderer.Destroy()
 
-	texture, err := renderer.CreateTexture(uint32(sdl.PIXELFORMAT_RGB24), sdl.TEXTUREACCESS_TARGET, 256, 240)
+	texture, err := renderer.CreateTexture(uint32(sdl.PIXELFORMAT_RGB24), sdl.TEXTUREACCESS_STREAMING, 256, 240)
 	if err != nil {
 		panic(err)
 	}
@@ -55,29 +63,35 @@ func runEmulator() {
 	// renderer.Copy(texture, nil, nil)
 	// renderer.Present()
 
-	running := true
+	running = true
+	skip := true
 	for running {
-		for range 20 {
-			tick()
-		}
-		// pixelBuffer := ppu.GetPpu().CurrentFrame.PixelData
-		pixelBuffer := ppu.GetPpu().CurrentPixelBuffer
-		err = texture.Update(nil, unsafe.Pointer(&pixelBuffer), 256*3)
-		if err != nil {
-			panic(err)
-		}
-
-		renderer.Copy(texture, nil, nil)
-		renderer.Present()
-
-		for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
-			switch event.(type) {
-			case *sdl.QuitEvent: // NOTE: Please use `*sdl.QuitEvent` for `v0.4.x` (current version).
-				ppu.HexDumpVram("./vram.txt")
-				println("Quit")
-				running = false
+		tick()
+		if ppu.GetPpu().CurrentFrame.Ready {
+			if skip {
+				skip = false
+			} else {
+				pixelBuffer := ppu.GetPpu().CurrentFrame.GetPixelDataAndUpdateStatus()
+				err = texture.Update(nil, unsafe.Pointer(&pixelBuffer), 256*3)
+				if err != nil {
+					panic(err)
+				}
+				renderer.Copy(texture, nil, nil)
+				renderer.Present()
+				for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
+					handleEvent(joyPad, event)
+				}
+				skip = false
 			}
 		}
+
+		// pixelBuffer := ppu.GetPpu().CurrentFrame.PixelData
+		// pixelBuffer := ppu.GetPpu().CurrentPixelBuffer
+		// err = texture.Update(nil, unsafe.Pointer(&pixelBuffer), 256*3)
+		// if err != nil {
+		// 	panic(err)
+		// }
+
 		// time.Sleep(46 * time.Nanosecond * time.Duration(cpu.GetCpu().LastInstructionCycles))
 		// time.Sleep(time.Millisecond)
 	}
@@ -85,6 +99,50 @@ func runEmulator() {
 	// for {
 	// 	tick()
 	// }
+}
+
+func handleEvent(joyPad *controller.JoyPad, event sdl.Event) {
+	switch t := event.(type) {
+	case *sdl.QuitEvent: // NOTE: Please use `*sdl.QuitEvent` for `v0.4.x` (current version).
+		ppu.HexDumpVram("./vram.txt")
+		println("Quit")
+		running = false
+
+	case *sdl.KeyboardEvent:
+		switch t.State {
+		case sdl.PRESSED:
+			handleKeyPress(joyPad, t.Keysym.Sym, true)
+		case sdl.RELEASED:
+			handleKeyPress(joyPad, t.Keysym.Sym, false)
+		}
+	}
+}
+
+func handleKeyPress(joyPad *controller.JoyPad, key sdl.Keycode, pressed bool) {
+	var val uint
+	if pressed {
+		val = 1
+	} else {
+		val = 0
+	}
+	switch key {
+	case sdl.K_a:
+		joyPad.SetButtonStatus(controller.LEFT, val)
+	case sdl.K_s:
+		joyPad.SetButtonStatus(controller.DOWN, val)
+	case sdl.K_d:
+		joyPad.SetButtonStatus(controller.RIGHT, val)
+	case sdl.K_w:
+		joyPad.SetButtonStatus(controller.UP, val)
+	case sdl.K_j:
+		joyPad.SetButtonStatus(controller.A, val)
+	case sdl.K_k:
+		joyPad.SetButtonStatus(controller.B, val)
+	case sdl.K_SPACE:
+		joyPad.SetButtonStatus(controller.START, val)
+	case sdl.K_z:
+		joyPad.SetButtonStatus(controller.SELECT, val)
+	}
 }
 
 func tick() {

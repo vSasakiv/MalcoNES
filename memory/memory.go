@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"vsasakiv/nesemulator/cartridge"
+	"vsasakiv/nesemulator/controller"
 	"vsasakiv/nesemulator/ppu"
 )
 
@@ -16,6 +17,9 @@ const OAMDATA = 0x2004
 const PPUSCROLL = 0x2005
 const PPUADDR = 0x2006
 const PPUDATA = 0x2007
+const OAMDMA = 0x4014
+
+const CONTROLLER1 = 0x4016
 
 type Memory struct {
 	ram             [0x0800]uint8
@@ -24,6 +28,7 @@ type Memory struct {
 	OamDmaPage      uint8
 }
 
+var joyPad1 *controller.JoyPad
 var MainMemory Memory
 
 // copy of memory, where we have a 1 where the memory was touched in some point, only for debug
@@ -33,6 +38,10 @@ var debug bool = true
 
 func LoadFromCartridge(cartridge cartridge.Cartridge) {
 	MainMemory.rom = cartridge
+}
+
+func ConnectJoyPad1(joyPad *controller.JoyPad) {
+	joyPad1 = joyPad
 }
 
 func MemRead(addr uint16) uint8 {
@@ -51,8 +60,10 @@ func MemRead(addr uint16) uint8 {
 			return ppu.GetPpu().ReadPpuDataRegister()
 		}
 	// OAMDMA returns placeholder 0x40
-	case addr == 0x4014:
+	case addr == OAMDMA:
 		return 0x40
+	case addr == CONTROLLER1:
+		return joyPad1.ReceiveRead()
 	case addr >= 0x8000:
 		return readPrgRom(addr)
 	}
@@ -108,9 +119,11 @@ func MemWrite(addr uint16, val uint8) {
 			ppu.GetPpu().WriteToPpuDataRegister(val)
 		}
 	// OAMDMA, using interrupt
-	case addr == 0x4014:
+	case addr == OAMDMA:
 		MainMemory.OamDmaInterrupt = true
 		MainMemory.OamDmaPage = val
+	case addr == CONTROLLER1:
+		joyPad1.ReceiveWrite(val)
 	// prg rom
 	case addr >= 0x8000:
 		fmt.Println("Warning: cant write to ROM")

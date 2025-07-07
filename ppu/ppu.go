@@ -73,6 +73,7 @@ func Execute(cycles uint) {
 		if ppu.scanlines == 0 && ppu.cycles == 0 {
 			ppu.CurrentFrame = *NewFrame()
 			backgroundRomBank := ppu.getControlSetting(BACKGROUND_TABLE_ADDRESS)
+			oamRomBank := ppu.getControlSetting(SPRITE_TABLE_ADDRESS)
 			// nameTableControl := ppu.getControlSetting(NAMETABLE_ADDRESS)
 			// var nameTableAddress uint16
 			// switch nameTableControl {
@@ -86,6 +87,7 @@ func Execute(cycles uint) {
 			// 	nameTableAddress = 0x2C00
 			// }
 			ppu.CurrentFrame.RenderNameTable(0x2000, uint(backgroundRomBank))
+			ppu.CurrentFrame.RenderOam(uint(oamRomBank))
 		}
 		if ppu.cycles == 0 {
 			ppu.cycles += 1
@@ -93,11 +95,11 @@ func Execute(cycles uint) {
 			if ppu.scanlines >= 240 {
 				ppu.cycles += 1
 			} else {
-				// push pixel to screen
-				address := (ppu.cycles-1)*3 + ppu.scanlines*3*XSIZE
-				ppu.CurrentPixelBuffer[address] = ppu.CurrentFrame.PixelData[address]
-				ppu.CurrentPixelBuffer[address+1] = ppu.CurrentFrame.PixelData[address+1]
-				ppu.CurrentPixelBuffer[address+2] = ppu.CurrentFrame.PixelData[address+2]
+				// push pixel to screen (for debugging)
+				// address := (ppu.cycles-1)*3 + ppu.scanlines*3*XSIZE
+				// ppu.CurrentPixelBuffer[address] = ppu.CurrentFrame.PixelData[address]
+				// ppu.CurrentPixelBuffer[address+1] = ppu.CurrentFrame.PixelData[address+1]
+				// ppu.CurrentPixelBuffer[address+2] = ppu.CurrentFrame.PixelData[address+2]
 				ppu.cycles += 1
 			}
 		} else if ppu.cycles >= 257 && ppu.cycles <= 340 {
@@ -106,6 +108,10 @@ func Execute(cycles uint) {
 			ppu.cycles -= 341
 			ppu.scanlines += 1
 
+			// send frame for rendering
+			if ppu.scanlines >= 241 && ppu.cycles == 0 {
+				ppu.CurrentFrame.Ready = true
+			}
 			// Vblank, send NMI interrupt if enabled and set flag
 			if ppu.scanlines >= 241 {
 				ppu.setVblankStatus(1)
