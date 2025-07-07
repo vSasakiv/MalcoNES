@@ -1,5 +1,7 @@
 package ppu
 
+import "fmt"
+
 // ppu control settings
 const NAMETABLE_ADDRESS = "NAMETABLE_ADDRESS"
 const INCREMENT = "INCREMENT"
@@ -42,6 +44,10 @@ type Ppu struct {
 	NmiInterrupt bool
 	// color palette
 	systemPalette map[uint8][3]uint8
+	// frame control
+	vramAddress        uint16
+	CurrentFrame       Frame
+	CurrentPixelBuffer [XSIZE * YSIZE * 3]uint8
 }
 
 // Initialize cpu with corret parameters, also initialize instructionTable
@@ -57,23 +63,61 @@ func GetPpu() *Ppu {
 
 var ppu Ppu = *NewPpu()
 
-func Execute(cycles uint) {
-	ppu.cycles += cycles
-	if cycles >= 341 {
-		ppu.cycles -= 341
-		ppu.scanlines += 1
+func GetPixelBuffer() [XSIZE * YSIZE * 3]uint8 {
+	return ppu.CurrentPixelBuffer
+}
 
-		// Vblank, send NMI interrupt if enabled and set flag
-		if ppu.scanlines >= 241 {
-			if ppu.getControlSetting(VBLANK_NMI_ENABLE) == 1 {
-				ppu.setVblankStatus(1)
-				ppu.NmiInterrupt = true
-			}
+func Execute(cycles uint) {
+
+	for range cycles {
+		if ppu.scanlines == 0 && ppu.cycles == 0 {
+			ppu.CurrentFrame = *NewFrame()
+			backgroundRomBank := ppu.getControlSetting(BACKGROUND_TABLE_ADDRESS)
+			// nameTableControl := ppu.getControlSetting(NAMETABLE_ADDRESS)
+			// var nameTableAddress uint16
+			// switch nameTableControl {
+			// case 0b00:
+			// 	nameTableAddress = 0x2000
+			// case 0b01:
+			// 	nameTableAddress = 0x2400
+			// case 0b10:
+			// 	nameTableAddress = 0x2800
+			// case 0b11:
+			// 	nameTableAddress = 0x2C00
+			// }
+			ppu.CurrentFrame.RenderNameTable(0x2000, uint(backgroundRomBank))
 		}
-		if ppu.scanlines >= 262 {
-			ppu.setVblankStatus(0)
-			ppu.NmiInterrupt = false
-			ppu.scanlines = 0
+		if ppu.cycles == 0 {
+			ppu.cycles += 1
+		} else if ppu.cycles >= 1 && ppu.cycles <= 256 {
+			if ppu.scanlines >= 240 {
+				ppu.cycles += 1
+			} else {
+				// push pixel to screen
+				address := (ppu.cycles-1)*3 + ppu.scanlines*3*XSIZE
+				ppu.CurrentPixelBuffer[address] = ppu.CurrentFrame.PixelData[address]
+				ppu.CurrentPixelBuffer[address+1] = ppu.CurrentFrame.PixelData[address+1]
+				ppu.CurrentPixelBuffer[address+2] = ppu.CurrentFrame.PixelData[address+2]
+				ppu.cycles += 1
+			}
+		} else if ppu.cycles >= 257 && ppu.cycles <= 340 {
+			ppu.cycles += 1
+		} else if ppu.cycles >= 341 {
+			ppu.cycles -= 341
+			ppu.scanlines += 1
+
+			// Vblank, send NMI interrupt if enabled and set flag
+			if ppu.scanlines >= 241 {
+				ppu.setVblankStatus(1)
+				if ppu.getControlSetting(VBLANK_NMI_ENABLE) == 1 {
+					ppu.NmiInterrupt = true
+				}
+			}
+			if ppu.scanlines >= 262 {
+				ppu.setVblankStatus(0)
+				ppu.NmiInterrupt = false
+				ppu.scanlines = 0
+			}
 		}
 	}
 }
@@ -89,9 +133,9 @@ func (ppu *Ppu) PollForNmiInterrupt() bool {
 func (ppu *Ppu) WriteToAddrRegister(val uint8) {
 	// write to high/low byte
 	if ppu.writeToggle {
-		ppu.ppuAddr = uint16(val)&0xFF00 | ppu.ppuAddr&0x00FF
-	} else {
 		ppu.ppuAddr = uint16(val)&0x00FF | ppu.ppuAddr&0xFF00
+	} else {
+		ppu.ppuAddr = (uint16(val)<<8)&0xFF00 | ppu.ppuAddr&0x00FF
 	}
 	// loops value back arround to first address
 	if ppu.ppuAddr > 0x3FFF {
@@ -140,22 +184,23 @@ func (ppu *Ppu) getControlSetting(setting string) uint8 {
 }
 
 func (ppu *Ppu) ReadPpuDataRegister() uint8 {
-	// increment address after everything
-	defer ppu.incrementAddrRegister()
-
 	// if it is pallete ram, return the value instantly
 	if ppu.ppuAddr >= 0x3F00 {
-		return PpuMemRead(ppu.ppuAddr)
+		result := PpuMemRead(ppu.ppuAddr)
+		ppu.incrementAddrRegister()
+		return result
 	}
 	result := ppu.readBuffer
 	ppu.readBuffer = PpuMemRead(ppu.ppuAddr)
+	// increment address after everything
+	ppu.incrementAddrRegister()
 	return result
 }
 
 func (ppu *Ppu) WriteToPpuDataRegister(val uint8) {
 	// increment address after everything
-	defer ppu.incrementAddrRegister()
 	PpuMemWrite(ppu.ppuAddr, val)
+	ppu.incrementAddrRegister()
 }
 
 func (ppu *Ppu) WriteToPpuMask(val uint8) {
@@ -199,8 +244,9 @@ func (ppu *Ppu) ReadOamDataRegister() uint8 {
 
 func (ppu *Ppu) ReadPpuStatusRegister() uint8 {
 	ppu.writeToggle = false
+	status := ppu.ppuStatus
 	ppu.setVblankStatus(0)
-	return ppu.ppuStatus
+	return status
 }
 
 func (ppu *Ppu) WriteToPpuScroll(val uint8) {
@@ -218,4 +264,8 @@ func (ppu *Ppu) setVblankStatus(val uint8) {
 	} else {
 		ppu.ppuStatus &^= 1 << 7
 	}
+}
+
+func (ppu *Ppu) TracePpuStatus() string {
+	return fmt.Sprintf("PPU:%03d, %03d  ADDR: %04X CTRL:%08b", ppu.scanlines, ppu.cycles, ppu.ppuAddr, ppu.ppuCtrl)
 }

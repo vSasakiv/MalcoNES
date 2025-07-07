@@ -2,6 +2,7 @@ package ppu
 
 import (
 	"fmt"
+	"os"
 	"vsasakiv/nesemulator/cartridge"
 )
 
@@ -25,7 +26,7 @@ import (
 //  _______________________ 0x0000
 
 type Memory struct {
-	vram       [0x1000]uint8
+	vram       [0x0800]uint8
 	rom        cartridge.Cartridge
 	paletteRam [0x0100]uint8
 	oam        [0x0100]uint8
@@ -92,10 +93,14 @@ func mirrorVramAddress(addr uint16) uint16 {
 		// HORIZONTAL Mirroring
 		//     [ A ] [ A ]
 		//     [ B ] [ B ]
-		if addr >= 0x2000 && addr <= 0x23FF || addr >= 0x2800 && addr <= 0x2BFF {
+		if addr >= 0x2000 && addr <= 0x23FF {
 			addr -= 0x2000
-		} else {
+		} else if addr >= 0x2400 && addr <= 0x27FF {
 			addr -= 0x2400
+		} else if addr >= 0x2800 && addr <= 0x2BFF {
+			addr -= 0x2400
+		} else {
+			addr -= 0x2800
 		}
 
 	case cartridge.VerticalMirroring:
@@ -105,7 +110,7 @@ func mirrorVramAddress(addr uint16) uint16 {
 		if addr >= 0x2000 && addr <= 0x23FF || addr >= 0x2400 && addr <= 0x27FF {
 			addr -= 0x2000
 		} else {
-			addr -= 0x0800
+			addr -= 0x2800
 		}
 
 	case cartridge.FourScreenMirroring:
@@ -115,4 +120,35 @@ func mirrorVramAddress(addr uint16) uint16 {
 		addr -= 0x2000
 	}
 	return addr
+}
+
+func HexDumpVram(filename string) {
+
+	content := ""
+
+	for i := range 0x0800 {
+		content += fmt.Sprintf("%04X : %02X\n", i, PpuMemory.vram[uint16(i)])
+	}
+	content += "PALETTE RAM:\n"
+	for i := range 0x0100 {
+		content += fmt.Sprintf("%04X : %02X\n", i, PpuMemory.paletteRam[uint16(i)])
+	}
+
+	file, err := os.Create(filename)
+
+	if err != nil {
+		fmt.Println("Error creating the file", err)
+		return
+	}
+
+	defer file.Close()
+
+	_, err = file.WriteString(content)
+	if err != nil {
+		fmt.Println("Error writing to file", err)
+		return
+	}
+
+	fmt.Println("Successfully dumped memory to ", filename)
+
 }

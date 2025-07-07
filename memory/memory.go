@@ -20,8 +20,6 @@ const PPUDATA = 0x2007
 type Memory struct {
 	ram             [0x0800]uint8
 	rom             cartridge.Cartridge
-	vram            [0x1000]uint8
-	paletteRam      [0x0100]uint8
 	OamDmaInterrupt bool
 	OamDmaPage      uint8
 }
@@ -45,6 +43,8 @@ func MemRead(addr uint16) uint8 {
 	case addr >= 0x2000 && addr <= 0x3FFF:
 		addr = ((addr - 0x2000) % 0x0008) + 0x2000
 		switch addr {
+		case PPUSTATUS:
+			return ppu.GetPpu().ReadPpuStatusRegister()
 		case OAMDATA:
 			return ppu.GetPpu().ReadOamDataRegister()
 		case PPUDATA:

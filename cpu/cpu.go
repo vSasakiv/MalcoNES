@@ -30,6 +30,15 @@ func NewCpu() *Cpu {
 	return &cpu
 }
 
+func (cpu *Cpu) Reset() {
+	cpu.Acc = 0
+	cpu.Xidx = 0
+	cpu.Yidx = 0
+	cpu.Psts = 0b00100100
+	cpu.Sptr = 0xFD
+	cpu.Pc = memory.MemRead16(0xFFFC)
+}
+
 func GetCpu() *Cpu {
 	return &cpu
 }
