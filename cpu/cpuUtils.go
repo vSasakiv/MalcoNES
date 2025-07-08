@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"slices"
-	"strings"
 	"vsasakiv/nesemulator/cartridge"
 	"vsasakiv/nesemulator/memory"
 )
@@ -225,11 +224,12 @@ func (cpu *Cpu) TraceStatus() string {
 	}
 
 	instructionMnemonic := cpu.opcodeTable[opcode] + " "
-	instructionOp := getOperand(opcode, cpu.Pc)
-	instructionOp = instructionOp + strings.Repeat(" ", 28-len(instructionOp))
+	// instructionOp := getOperand(opcode, cpu.Pc)
+	// instructionOp = instructionOp + strings.Repeat(" ", 28-len(instructionOp))
 	registers := cpu.getRegisters() + " "
 	cycles := fmt.Sprintf("CYC:%d", cpu.cycles)
-	return pc + instructionHex + instructionMnemonic + instructionOp + registers + cycles
+	// return pc + instructionHex + instructionMnemonic + instructionOp + registers + cycles
+	return pc + instructionHex + instructionMnemonic + registers + cycles
 }
 
 // given an instruction, calculates the ammount of cycles it takes

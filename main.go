@@ -1,6 +1,9 @@
 package main
 
 import (
+	"os"
+	"runtime/pprof"
+	"time"
 	"unsafe"
 	"vsasakiv/nesemulator/cartridge"
 	"vsasakiv/nesemulator/controller"
@@ -16,6 +19,9 @@ const CPUCLOCK = 21441960
 var running bool
 
 func main() {
+	f, _ := os.Create("cpu.prof")
+	pprof.StartCPUProfile(f)
+	defer pprof.StopCPUProfile()
 	runEmulator()
 }
 
@@ -35,7 +41,7 @@ func runEmulator() {
 	}
 	defer sdl.Quit()
 
-	window, err := sdl.CreateWindow("Rom viewer", sdl.WINDOWPOS_UNDEFINED, sdl.WINDOWPOS_UNDEFINED, 256*4, 240*4, sdl.WINDOW_SHOWN)
+	window, err := sdl.CreateWindow("Rom viewer", sdl.WINDOWPOS_UNDEFINED, sdl.WINDOWPOS_UNDEFINED, 256*3, 240*3, sdl.WINDOW_SHOWN)
 
 	if err != nil {
 		panic(err)
@@ -63,35 +69,44 @@ func runEmulator() {
 	// renderer.Copy(texture, nil, nil)
 	// renderer.Present()
 
+	// 60fps
+	const frameInterval = time.Second / 60
 	running = true
-	skip := true
 	for running {
-		tick()
-		if ppu.GetPpu().CurrentFrame.Ready {
-			if skip {
-				skip = false
-			} else {
-				pixelBuffer := ppu.GetPpu().CurrentFrame.GetPixelDataAndUpdateStatus()
-				err = texture.Update(nil, unsafe.Pointer(&pixelBuffer), 256*3)
-				if err != nil {
-					panic(err)
-				}
-				renderer.Copy(texture, nil, nil)
-				renderer.Present()
-				for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
-					handleEvent(joyPad, event)
-				}
-				skip = false
-			}
+		frameStart := time.Now()
+
+		for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
+			handleEvent(joyPad, event)
 		}
+
+		cycles := 0
+		for cycles < 320000 {
+			tick()
+			cycles += int(cpu.GetCpu().LastInstructionCycles)
+		}
+
+		pixelBuffer := ppu.GetPpu().CurrentFrame.GetPixelDataAndUpdateStatus()
+
+		pixels, _, err := texture.Lock(nil)
+		if err != nil {
+			panic(err)
+		}
+		copy(pixels, pixelBuffer)
+		texture.Unlock()
+		// err = texture.Update(nil, unsafe.Pointer(&pixelBuffer[0]), 256*3)
+
+		renderer.Copy(texture, nil, nil)
+		renderer.Present()
 
 		// pixelBuffer := ppu.GetPpu().CurrentFrame.PixelData
 		// pixelBuffer := ppu.GetPpu().CurrentPixelBuffer
 		// err = texture.Update(nil, unsafe.Pointer(&pixelBuffer), 256*3)
 		// if err != nil {
 		// 	panic(err)
-		// }
-
+		elapsedTime := time.Since(frameStart)
+		if elapsedTime < frameInterval {
+			time.Sleep(frameInterval - elapsedTime)
+		}
 		// time.Sleep(46 * time.Nanosecond * time.Duration(cpu.GetCpu().LastInstructionCycles))
 		// time.Sleep(time.Millisecond)
 	}
@@ -146,7 +161,6 @@ func handleKeyPress(joyPad *controller.JoyPad, key sdl.Keycode, pressed bool) {
 }
 
 func tick() {
-	// fmt.Println(cpu.GetCpu().TraceStatus() + " " + ppu.GetPpu().TracePpuStatus())
 	cpu.ExecuteNext()
 	ppu.Execute(cpu.GetCpu().LastInstructionCycles * 3)
 	// fmt.Println(ppu.GetPpu().TracePpuStatus())

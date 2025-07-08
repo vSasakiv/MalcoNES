@@ -7,8 +7,8 @@ import (
 	"os"
 )
 
-func GenerateFromPalFile(path string) map[uint8][3]uint8 {
-	palette := make(map[uint8][3]uint8, 64)
+func GenerateFromPalFile(path string) [64][3]uint8 {
+	var palette [64][3]uint8
 
 	file, err := os.Open(path)
 	if err != nil {

@@ -594,5 +594,5 @@ func (cpu *Cpu) OamDmaWrite(page uint8) {
 		val := memory.MemRead((uint16(page) << 8) + i)
 		memory.MemWrite(memory.OAMDATA, val)
 	}
-	cpu.LastInstructionCycles = 314
+	cpu.LastInstructionCycles = 514
 }

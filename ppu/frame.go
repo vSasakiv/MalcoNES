@@ -12,12 +12,10 @@ const NAMETABLE_SIZE = 0x03C0
 
 type Frame struct {
 	PixelData [XSIZE * YSIZE * 3]uint8
-	Ready     bool
 }
 
 func NewFrame() *Frame {
 	var frame Frame
-	frame.Ready = false
 	return &frame
 }
 
@@ -28,12 +26,11 @@ func (frame *Frame) setPixel(x uint, y uint, rgb [3]uint8) {
 	frame.PixelData[address+2] = rgb[2]
 }
 
-func (frame *Frame) GetPixelDataAndUpdateStatus() [XSIZE * YSIZE * 3]uint8 {
-	frame.Ready = false
-	return frame.PixelData
+func (frame *Frame) GetPixelDataAndUpdateStatus() []uint8 {
+	return frame.PixelData[:]
 }
 
-func (frame *Frame) renderTile(tile [16]uint8, tileN uint, palette map[uint8][3]uint8) {
+func (frame *Frame) renderTile(tile [16]uint8, tileN uint, palette [4][3]uint8) {
 	// rendering full tile
 	var fullTile [64]uint8
 	for i := range 8 {
@@ -52,7 +49,7 @@ func (frame *Frame) renderTile(tile [16]uint8, tileN uint, palette map[uint8][3]
 	}
 }
 
-func (frame *Frame) renderOamTile(tile [16]uint8, tileX uint, tileY uint, palette map[uint8][3]uint8) {
+func (frame *Frame) renderOamTile(tile [16]uint8, tileX uint, tileY uint, palette [4][3]uint8) {
 	var fullTile [64]uint8
 	for i := range 8 {
 		for j := range 8 {
@@ -80,7 +77,7 @@ func (frame *Frame) renderOamTile(tile [16]uint8, tileX uint, tileY uint, palett
 func (frame *Frame) RenderRomBank(bank uint) {
 	address := uint16(bank) * 0x1000
 	for i := range uint(256) {
-		palette := map[uint8][3]uint8{
+		palette := [4][3]uint8{
 			0b00: ppu.systemPalette[0x00],
 			0b01: ppu.systemPalette[0x17],
 			0b10: ppu.systemPalette[0x21],
@@ -144,9 +141,9 @@ func flipTile(tile [16]uint8, flipHorizontal bool, flipVertical bool) [16]uint8 
 	return tile
 }
 
-func getOamSpritePallete(paletteIdx uint8) map[uint8][3]uint8 {
+func getOamSpritePallete(paletteIdx uint8) [4][3]uint8 {
 	paletteStart := uint16(DEFAULT_OAM_PALETTE_ADDRESS) + uint16(paletteIdx)*4
-	return map[uint8][3]uint8{
+	return [4][3]uint8{
 		0b00: ppu.systemPalette[PpuMemRead(DEFAULT_OAM_PALETTE_ADDRESS)],
 		0b01: ppu.systemPalette[PpuMemRead(paletteStart)],
 		0b10: ppu.systemPalette[PpuMemRead(paletteStart+1)],
@@ -154,7 +151,7 @@ func getOamSpritePallete(paletteIdx uint8) map[uint8][3]uint8 {
 	}
 }
 
-func GetBackgroundPalette(nameTableAddress uint16, tileN uint16) map[uint8][3]uint8 {
+func GetBackgroundPalette(nameTableAddress uint16, tileN uint16) [4][3]uint8 {
 	tileX := tileN % 32
 	tileY := tileN / 32
 	// divided in meta-tiles of 4 tiles each, divide everything by 4
@@ -178,7 +175,7 @@ func GetBackgroundPalette(nameTableAddress uint16, tileN uint16) map[uint8][3]ui
 	case subTileX == 1 && subTileY == 1:
 		paletteStart += uint16((attribute>>6)&0b11) * 4
 	}
-	return map[uint8][3]uint8{
+	return [4][3]uint8{
 		0b00: ppu.systemPalette[PpuMemRead(DEFAULT_BG_PALETTE_ADDRESS)],
 		0b01: ppu.systemPalette[PpuMemRead(paletteStart)],
 		0b10: ppu.systemPalette[PpuMemRead(paletteStart+1)],

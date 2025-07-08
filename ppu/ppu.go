@@ -43,14 +43,14 @@ type Ppu struct {
 	// nmi interrupt signal
 	NmiInterrupt bool
 	// color palette
-	systemPalette map[uint8][3]uint8
+	systemPalette [64][3]uint8
 	// frame control
 	vramAddress        uint16
 	CurrentFrame       Frame
 	CurrentPixelBuffer [XSIZE * YSIZE * 3]uint8
 }
 
-// Initialize cpu with corret parameters, also initialize instructionTable
+// Initialize ppu with corret parameters, also initialize system palette
 func NewPpu() *Ppu {
 	var ppu Ppu
 	ppu.systemPalette = GenerateFromPalFile("./ppu/palettes/2C02.pal")
@@ -71,7 +71,6 @@ func Execute(cycles uint) {
 
 	for range cycles {
 		if ppu.scanlines == 0 && ppu.cycles == 0 {
-			ppu.CurrentFrame = *NewFrame()
 			backgroundRomBank := ppu.getControlSetting(BACKGROUND_TABLE_ADDRESS)
 			oamRomBank := ppu.getControlSetting(SPRITE_TABLE_ADDRESS)
 			// nameTableControl := ppu.getControlSetting(NAMETABLE_ADDRESS)
@@ -89,6 +88,7 @@ func Execute(cycles uint) {
 			ppu.CurrentFrame.RenderNameTable(0x2000, uint(backgroundRomBank))
 			ppu.CurrentFrame.RenderOam(uint(oamRomBank))
 		}
+
 		if ppu.cycles == 0 {
 			ppu.cycles += 1
 		} else if ppu.cycles >= 1 && ppu.cycles <= 256 {
@@ -108,10 +108,6 @@ func Execute(cycles uint) {
 			ppu.cycles -= 341
 			ppu.scanlines += 1
 
-			// send frame for rendering
-			if ppu.scanlines >= 241 && ppu.cycles == 0 {
-				ppu.CurrentFrame.Ready = true
-			}
 			// Vblank, send NMI interrupt if enabled and set flag
 			if ppu.scanlines >= 241 {
 				ppu.setVblankStatus(1)
