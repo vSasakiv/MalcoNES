@@ -37,7 +37,7 @@ func main() {
 	ebiten.SetWindowTitle("My Emulator (debug)")
 
 	// setup and load cartridge
-	nestest := cartridge.ReadFromFile("./testFiles/pacman.nes")
+	nestest := cartridge.ReadFromFile("./testFiles/supermario.nes")
 
 	memory.LoadFromCartridge(nestest)
 
@@ -63,7 +63,7 @@ func (g *Game) Update() error {
 
 	// Emulation step
 	cycles := 0
-	for cycles < 297800 {
+	for cycles < 29780 {
 		tick()
 		cycles += int(cpu.GetCpu().LastInstructionCycles)
 	}

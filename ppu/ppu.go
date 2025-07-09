@@ -70,57 +70,78 @@ func GetPixelBuffer() [XSIZE * YSIZE * 3]uint8 {
 func Execute(cycles uint) {
 
 	for range cycles {
-		if ppu.scanlines == 0 && ppu.cycles == 0 {
-			backgroundRomBank := ppu.getControlSetting(BACKGROUND_TABLE_ADDRESS)
-			oamRomBank := ppu.getControlSetting(SPRITE_TABLE_ADDRESS)
-			// nameTableControl := ppu.getControlSetting(NAMETABLE_ADDRESS)
-			// var nameTableAddress uint16
-			// switch nameTableControl {
-			// case 0b00:
-			// 	nameTableAddress = 0x2000
-			// case 0b01:
-			// 	nameTableAddress = 0x2400
-			// case 0b10:
-			// 	nameTableAddress = 0x2800
-			// case 0b11:
-			// 	nameTableAddress = 0x2C00
-			// }
-			ppu.CurrentFrame.RenderNameTable(0x2000, uint(backgroundRomBank))
-			ppu.CurrentFrame.RenderOam(uint(oamRomBank))
-		}
-
-		if ppu.cycles == 0 {
-			ppu.cycles += 1
-		} else if ppu.cycles >= 1 && ppu.cycles <= 256 {
-			if ppu.scanlines >= 240 {
-				ppu.cycles += 1
-			} else {
-				// push pixel to screen (for debugging)
-				// address := (ppu.cycles-1)*3 + ppu.scanlines*3*XSIZE
-				// ppu.CurrentPixelBuffer[address] = ppu.CurrentFrame.PixelData[address]
-				// ppu.CurrentPixelBuffer[address+1] = ppu.CurrentFrame.PixelData[address+1]
-				// ppu.CurrentPixelBuffer[address+2] = ppu.CurrentFrame.PixelData[address+2]
-				ppu.cycles += 1
-			}
-		} else if ppu.cycles >= 257 && ppu.cycles <= 340 {
-			ppu.cycles += 1
-		} else if ppu.cycles >= 341 {
-			ppu.cycles -= 341
+		ppu.cycles += 1
+		if ppu.cycles >= 341 {
+			ppu.cycles = 0
 			ppu.scanlines += 1
-
-			// Vblank, send NMI interrupt if enabled and set flag
-			if ppu.scanlines >= 241 {
+			if ppu.scanlines == 241 {
 				ppu.setVblankStatus(1)
 				if ppu.getControlSetting(VBLANK_NMI_ENABLE) == 1 {
 					ppu.NmiInterrupt = true
 				}
 			}
 			if ppu.scanlines >= 262 {
+				ppu.scanlines = 0
 				ppu.setVblankStatus(0)
 				ppu.NmiInterrupt = false
-				ppu.scanlines = 0
+				backgroundRomBank := ppu.getControlSetting(BACKGROUND_TABLE_ADDRESS)
+				oamRomBank := ppu.getControlSetting(SPRITE_TABLE_ADDRESS)
+				ppu.CurrentFrame.RenderNameTable(0x2000, uint(backgroundRomBank))
+				ppu.CurrentFrame.RenderOam(uint(oamRomBank))
+
 			}
 		}
+		// if ppu.scanlines == 0 && ppu.cycles == 0 {
+		// 	backgroundRomBank := ppu.getControlSetting(BACKGROUND_TABLE_ADDRESS)
+		// 	oamRomBank := ppu.getControlSetting(SPRITE_TABLE_ADDRESS)
+		// 	// nameTableControl := ppu.getControlSetting(NAMETABLE_ADDRESS)
+		// 	// var nameTableAddress uint16
+		// 	// switch nameTableControl {
+		// 	// case 0b00:
+		// 	// 	nameTableAddress = 0x2000
+		// 	// case 0b01:
+		// 	// 	nameTableAddress = 0x2400
+		// 	// case 0b10:
+		// 	// 	nameTableAddress = 0x2800
+		// 	// case 0b11:
+		// 	// 	nameTableAddress = 0x2C00
+		// 	// }
+		// 	ppu.CurrentFrame.RenderNameTable(0x2000, uint(backgroundRomBank))
+		// 	ppu.CurrentFrame.RenderOam(uint(oamRomBank))
+		// }
+		//
+		// if ppu.cycles == 0 {
+		// 	ppu.cycles += 1
+		// } else if ppu.cycles >= 1 && ppu.cycles <= 256 {
+		// 	if ppu.scanlines >= 240 {
+		// 		ppu.cycles += 1
+		// 	} else {
+		// 		// push pixel to screen (for debugging)
+		// 		// address := (ppu.cycles-1)*3 + ppu.scanlines*3*XSIZE
+		// 		// ppu.CurrentPixelBuffer[address] = ppu.CurrentFrame.PixelData[address]
+		// 		// ppu.CurrentPixelBuffer[address+1] = ppu.CurrentFrame.PixelData[address+1]
+		// 		// ppu.CurrentPixelBuffer[address+2] = ppu.CurrentFrame.PixelData[address+2]
+		// 		ppu.cycles += 1
+		// 	}
+		// } else if ppu.cycles >= 257 && ppu.cycles <= 340 {
+		// 	ppu.cycles += 1
+		// } else if ppu.cycles >= 341 {
+		// 	ppu.cycles -= 341
+		// 	ppu.scanlines += 1
+		//
+		// 	// Vblank, send NMI interrupt if enabled and set flag
+		// 	if ppu.scanlines >= 241 {
+		// 		ppu.setVblankStatus(1)
+		// 		if ppu.getControlSetting(VBLANK_NMI_ENABLE) == 1 {
+		// 			ppu.NmiInterrupt = true
+		// 		}
+		// 	}
+		// 	if ppu.scanlines >= 262 {
+		// 		ppu.setVblankStatus(0)
+		// 		ppu.NmiInterrupt = false
+		// 		ppu.scanlines = 0
+		// 	}
+		// }
 	}
 }
 
