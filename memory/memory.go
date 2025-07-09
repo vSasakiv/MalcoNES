@@ -76,16 +76,16 @@ func MemRead16(addr uint16) uint16 {
 		// zero page reading, should wrap
 		var low, high uint16
 		if addr == 0x00FF {
-			low = uint16(MainMemory.ram[addr])
-			high = uint16(MainMemory.ram[0x0000]) << 8
+			low = uint16(MemRead(addr))
+			high = uint16(MemRead(0)) << 8
 		} else {
-			low = uint16(MainMemory.ram[addr])
-			high = uint16(MainMemory.ram[addr+1]) << 8
+			low = uint16(MemRead(addr))
+			high = uint16(MemRead(addr+1)) << 8
 		}
 		return high + low
 	case addr >= 0x8000:
-		low := uint16(readPrgRom(addr))
-		high := uint16(readPrgRom(addr+1)) << 8
+		low := uint16(MemRead(addr))
+		high := uint16(MemRead(addr+1)) << 8
 		return high + low
 	}
 	return 0
@@ -138,8 +138,8 @@ func MemWrite16(addr uint16, val uint16) {
 			modified.ram[addr] = 1
 			modified.ram[addr+1] = 1
 		}
-		MainMemory.ram[addr] = uint8(val & 0xff)
-		MainMemory.ram[addr+1] = uint8((val >> 8) & 0xff)
+		MemWrite(addr, uint8(val&0xff))
+		MemWrite(addr+1, uint8((val>>8)&0xff))
 	case addr >= 0x8000:
 		fmt.Println("Warning: cant write to ROM")
 		return

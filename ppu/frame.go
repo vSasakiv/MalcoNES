@@ -26,7 +26,7 @@ func (frame *Frame) setPixel(x uint, y uint, rgb [3]uint8) {
 	frame.PixelData[address+2] = rgb[2]
 }
 
-func (frame *Frame) GetPixelDataAndUpdateStatus() []uint8 {
+func (frame *Frame) GetPixelData() []uint8 {
 	return frame.PixelData[:]
 }
 
