@@ -48,11 +48,15 @@ type Ppu struct {
 	vramAddress        uint16
 	CurrentFrame       Frame
 	CurrentPixelBuffer [XSIZE * YSIZE * 3]uint8
+	// sprite zero collision state
+	hasSpriteZeroCollision            bool
+	collisionCycle, collisionScanline uint
 }
 
 // Initialize ppu with corret parameters, also initialize system palette
 func NewPpu() *Ppu {
 	var ppu Ppu
+	ppu.hasSpriteZeroCollision = false
 	ppu.systemPalette = GenerateFromPalFile("./ppu/palettes/2C02.pal")
 	return &ppu
 }
@@ -74,23 +78,43 @@ func Execute(cycles uint) {
 		if ppu.cycles >= 341 {
 			ppu.cycles = 0
 			ppu.scanlines += 1
+			// when activating vblank, disable spriteZeroCollision
 			if ppu.scanlines == 241 {
+				ppu.clearSpriteZeroHit()
+				ppu.hasSpriteZeroCollision = false
 				ppu.setVblankStatus(1)
+
 				if ppu.getControlSetting(VBLANK_NMI_ENABLE) == 1 {
 					ppu.NmiInterrupt = true
 				}
 			}
 			if ppu.scanlines >= 262 {
 				ppu.scanlines = 0
+
+				ppu.clearSpriteZeroHit()
+				ppu.hasSpriteZeroCollision = false
+
 				ppu.setVblankStatus(0)
 				ppu.NmiInterrupt = false
 				backgroundRomBank := ppu.getControlSetting(BACKGROUND_TABLE_ADDRESS)
 				oamRomBank := ppu.getControlSetting(SPRITE_TABLE_ADDRESS)
-				ppu.CurrentFrame.RenderNameTable(0x2000, uint(backgroundRomBank))
-				ppu.CurrentFrame.RenderOam(uint(oamRomBank))
 
+				greyscale := ppu.getMaskSetting(GREYSCALE)
+
+				if ppu.getMaskSetting(ENABLE_BACKGROUND) == 1 {
+					ppu.CurrentFrame.RenderNameTable(0x2000, uint(backgroundRomBank), greyscale)
+				} else {
+					ppu.CurrentFrame.RenderEmptyBackground()
+				}
+
+				// renders sprites and detects sprite zero collision
+				if ppu.getMaskSetting(ENABLE_SPRITE) == 1 {
+					ppu.CurrentFrame.RenderOam(uint(oamRomBank), greyscale)
+					ppu.hasSpriteZeroCollision, ppu.collisionCycle, ppu.collisionScanline = ppu.CurrentFrame.spriteZeroCollision(uint(oamRomBank))
+				}
 			}
 		}
+		ppu.setSpriteZeroHit()
 		// if ppu.scanlines == 0 && ppu.cycles == 0 {
 		// 	backgroundRomBank := ppu.getControlSetting(BACKGROUND_TABLE_ADDRESS)
 		// 	oamRomBank := ppu.getControlSetting(SPRITE_TABLE_ADDRESS)
@@ -153,6 +177,120 @@ func (ppu *Ppu) PollForNmiInterrupt() bool {
 	return false
 }
 
+// ----- PPUCTRL 0x2000 REGISTER -----
+
+func (ppu *Ppu) WriteToPpuControl(val uint8) {
+	if (val>>7)&0b1 == 1 && (ppu.ppuCtrl>>7)&0b1 == 0 && (ppu.ppuStatus>>7)&0b1 == 1 {
+		ppu.NmiInterrupt = true
+	}
+	ppu.ppuCtrl = val
+}
+
+func (ppu *Ppu) getControlSetting(setting string) uint8 {
+	switch setting {
+	case NAMETABLE_ADDRESS:
+		return ppu.ppuCtrl & 0b11
+	case INCREMENT:
+		return (ppu.ppuCtrl >> 2) & 0b1
+	case SPRITE_TABLE_ADDRESS:
+		return (ppu.ppuCtrl >> 3) & 0b1
+	case BACKGROUND_TABLE_ADDRESS:
+		return (ppu.ppuCtrl >> 4) & 0b1
+	case SPRITE_SIZE:
+		return (ppu.ppuCtrl >> 5) & 0b1
+	case VBLANK_NMI_ENABLE:
+		return (ppu.ppuCtrl >> 7) & 0b1
+	}
+	return 0
+}
+
+// ----- PPUMASK 0x2001 REGISTER -----
+
+func (ppu *Ppu) WriteToPpuMask(val uint8) {
+	ppu.ppuMask = val
+}
+
+func (ppu *Ppu) getMaskSetting(setting string) uint8 {
+	switch setting {
+	case GREYSCALE:
+		return ppu.ppuMask & 0b1
+	case SHOW_BACKGROUND_LEFT:
+		return (ppu.ppuMask >> 1) & 0b1
+	case SHOW_SPRITES_LEFT:
+		return (ppu.ppuMask >> 2) & 0b1
+	case ENABLE_BACKGROUND:
+		return (ppu.ppuMask >> 3) & 0b1
+	case ENABLE_SPRITE:
+		return (ppu.ppuMask >> 4) & 0b1
+	case RED:
+		return (ppu.ppuMask >> 5) & 0b1
+	case GREEN:
+		return (ppu.ppuMask >> 6) & 0b1
+	case BLUE:
+		return (ppu.ppuMask >> 7) & 0b1
+	}
+	return 0
+}
+
+// ----- PPUSTATUS 0x2002 REGISTER -----
+
+func (ppu *Ppu) ReadPpuStatusRegister() uint8 {
+	ppu.writeToggle = false
+	status := ppu.ppuStatus
+	ppu.setVblankStatus(0)
+	return status
+}
+
+func (ppu *Ppu) setVblankStatus(val uint8) {
+	if val == 1 {
+		ppu.ppuStatus |= 1 << 7
+	} else {
+		ppu.ppuStatus &^= 1 << 7
+	}
+}
+
+func (ppu *Ppu) setSpriteZeroHit() {
+	if ppu.hasSpriteZeroCollision {
+		if ppu.cycles == ppu.collisionCycle && ppu.collisionScanline == ppu.scanlines {
+			ppu.ppuStatus |= 1 << 6
+		}
+	}
+}
+
+func (ppu *Ppu) clearSpriteZeroHit() {
+	ppu.ppuStatus &^= 1 << 6
+}
+
+// ----- OAMADDR 0x2003 REGISTER -----
+
+func (ppu *Ppu) WriteToOamAddrRegister(val uint8) {
+	ppu.ppuOamAddr = val
+}
+
+// ----- OAMDATA 0x2004 REGISTER -----
+
+func (ppu *Ppu) WriteToOamDataRegister(val uint8) {
+	PpuOamWrite(ppu.ppuOamAddr, val)
+	ppu.ppuOamAddr += 1
+}
+
+func (ppu *Ppu) ReadOamDataRegister() uint8 {
+	return PpuOamRead(ppu.ppuOamAddr)
+}
+
+// ----- PPUSCROLL 0x2005 REGISTER -----
+
+func (ppu *Ppu) WriteToPpuScroll(val uint8) {
+	if ppu.writeToggle {
+		ppu.ppuScrollX = val
+	} else {
+		ppu.ppuScrollY = val
+	}
+	ppu.writeToggle = !ppu.writeToggle
+}
+
+// ----- PPUADDR 0x2006 REGISTER -----
+
 func (ppu *Ppu) WriteToAddrRegister(val uint8) {
 	// write to high/low byte
 	if ppu.writeToggle {
@@ -181,30 +319,7 @@ func (ppu *Ppu) incrementAddrRegister() {
 	}
 }
 
-func (ppu *Ppu) WriteToPpuControl(val uint8) {
-	if (val>>7)&0b1 == 1 && (ppu.ppuCtrl>>7)&0b1 == 0 && (ppu.ppuStatus>>7)&0b1 == 1 {
-		ppu.NmiInterrupt = true
-	}
-	ppu.ppuCtrl = val
-}
-
-func (ppu *Ppu) getControlSetting(setting string) uint8 {
-	switch setting {
-	case NAMETABLE_ADDRESS:
-		return ppu.ppuCtrl & 0b11
-	case INCREMENT:
-		return (ppu.ppuCtrl >> 2) & 0b1
-	case SPRITE_TABLE_ADDRESS:
-		return (ppu.ppuCtrl >> 3) & 0b1
-	case BACKGROUND_TABLE_ADDRESS:
-		return (ppu.ppuCtrl >> 4) & 0b1
-	case SPRITE_SIZE:
-		return (ppu.ppuCtrl >> 5) & 0b1
-	case VBLANK_NMI_ENABLE:
-		return (ppu.ppuCtrl >> 7) & 0b1
-	}
-	return 0
-}
+// ----- PPUDATA 0x2007 REGISTER -----
 
 func (ppu *Ppu) ReadPpuDataRegister() uint8 {
 	// if it is pallete ram, return the value instantly
@@ -226,68 +341,7 @@ func (ppu *Ppu) WriteToPpuDataRegister(val uint8) {
 	ppu.incrementAddrRegister()
 }
 
-func (ppu *Ppu) WriteToPpuMask(val uint8) {
-	ppu.ppuMask = val
-}
-
-func (ppu *Ppu) getMaskSetting(setting string) uint8 {
-	switch setting {
-	case GREYSCALE:
-		return ppu.ppuMask & 0b1
-	case SHOW_BACKGROUND_LEFT:
-		return (ppu.ppuMask >> 1) & 0b1
-	case SHOW_SPRITES_LEFT:
-		return (ppu.ppuMask >> 2) & 0b1
-	case ENABLE_BACKGROUND:
-		return (ppu.ppuMask >> 3) & 0b1
-	case ENABLE_SPRITE:
-		return (ppu.ppuMask >> 4) & 0b1
-	case RED:
-		return (ppu.ppuMask >> 5) & 0b1
-	case GREEN:
-		return (ppu.ppuMask >> 6) & 0b1
-	case BLUE:
-		return (ppu.ppuMask >> 7) & 0b1
-	}
-	return 0
-}
-
-func (ppu *Ppu) WriteToOamAddrRegister(val uint8) {
-	ppu.ppuOamAddr = val
-}
-
-func (ppu *Ppu) WriteToOamDataRegister(val uint8) {
-	PpuOamWrite(ppu.ppuOamAddr, val)
-	ppu.ppuOamAddr += 1
-}
-
-func (ppu *Ppu) ReadOamDataRegister() uint8 {
-	return PpuOamRead(ppu.ppuOamAddr)
-}
-
-func (ppu *Ppu) ReadPpuStatusRegister() uint8 {
-	ppu.writeToggle = false
-	status := ppu.ppuStatus
-	ppu.setVblankStatus(0)
-	return status
-}
-
-func (ppu *Ppu) WriteToPpuScroll(val uint8) {
-	if ppu.writeToggle {
-		ppu.ppuScrollX = val
-	} else {
-		ppu.ppuScrollY = val
-	}
-	ppu.writeToggle = !ppu.writeToggle
-}
-
-func (ppu *Ppu) setVblankStatus(val uint8) {
-	if val == 1 {
-		ppu.ppuStatus |= 1 << 7
-	} else {
-		ppu.ppuStatus &^= 1 << 7
-	}
-}
+// ----- DEBUG -----
 
 func (ppu *Ppu) TracePpuStatus() string {
 	return fmt.Sprintf("PPU:%03d, %03d  ADDR: %04X CTRL:%08b", ppu.scanlines, ppu.cycles, ppu.ppuAddr, ppu.ppuCtrl)
