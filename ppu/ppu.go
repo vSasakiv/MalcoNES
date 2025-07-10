@@ -102,7 +102,20 @@ func Execute(cycles uint) {
 				greyscale := ppu.getMaskSetting(GREYSCALE)
 
 				if ppu.getMaskSetting(ENABLE_BACKGROUND) == 1 {
-					ppu.CurrentFrame.RenderNameTable(0x2000, uint(backgroundRomBank), greyscale)
+					nameTableControl := ppu.getControlSetting(NAMETABLE_ADDRESS)
+					var baseNameTable uint16
+					switch nameTableControl {
+					case 0b00:
+						baseNameTable = 0x2000
+					case 0b01:
+						baseNameTable = 0x2400
+					case 0b10:
+						baseNameTable = 0x2800
+					case 0b11:
+						baseNameTable = 0x2C00
+					}
+					ppu.CurrentFrame.RenderBackground(baseNameTable, uint(backgroundRomBank), ppu.ppuScrollX, ppu.ppuScrollY, greyscale)
+					// ppu.CurrentFrame.RenderNameTable(0x2000, uint(backgroundRomBank), greyscale)
 				} else {
 					ppu.CurrentFrame.RenderEmptyBackground()
 				}

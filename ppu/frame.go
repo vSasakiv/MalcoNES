@@ -84,6 +84,25 @@ func (frame *Frame) renderOamTile(tile [16]uint8, tileX uint, tileY uint, palett
 	}
 }
 
+type View struct {
+	x, y, width, height uint8
+}
+
+func (frame *Frame) RenderBackground(baseNameTableAddress uint16, tileBank uint, scrollX uint8, scrollY uint8, greyscale uint8) {
+	nextNameTableAddress := GetNextNameTableAddress(baseNameTableAddress)
+
+	baseTableView := View{x: scrollX, y: scrollY, width: (255 - scrollX), height: (239 - scrollY)}
+	nextTableView := View{x: 0, y: 0, width: scrollX, height: scrollY}
+
+	frame.renderNameTable(baseNameTableAddress, tileBank, baseTableView, greyscale)
+	frame.renderNameTable(nextNameTableAddress, tileBank, nextTableView, greyscale)
+}
+
+func (frame *Frame) renderNameTable(nameTableAddress uint16, tileBank uint, view View, greyscale uint8) {
+	// 30 x 32 tiles
+	// TODO
+}
+
 func (frame *Frame) RenderNameTable(nameTableAddress uint16, tileBank uint, greyscale uint8) {
 	tileAddress := uint16(tileBank) * 0x1000
 	for i := range uint16(NAMETABLE_SIZE) {
