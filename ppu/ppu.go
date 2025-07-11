@@ -75,6 +75,7 @@ func Execute(cycles uint) {
 
 	for range cycles {
 		ppu.cycles += 1
+		ppu.setSpriteZeroHit()
 		if ppu.cycles >= 341 {
 			ppu.cycles = 0
 			ppu.scanlines += 1
@@ -92,7 +93,6 @@ func Execute(cycles uint) {
 				ppu.scanlines = 0
 
 				ppu.clearSpriteZeroHit()
-				ppu.hasSpriteZeroCollision = false
 
 				ppu.setVblankStatus(0)
 				ppu.NmiInterrupt = false
@@ -127,58 +127,6 @@ func Execute(cycles uint) {
 				}
 			}
 		}
-		ppu.setSpriteZeroHit()
-		// if ppu.scanlines == 0 && ppu.cycles == 0 {
-		// 	backgroundRomBank := ppu.getControlSetting(BACKGROUND_TABLE_ADDRESS)
-		// 	oamRomBank := ppu.getControlSetting(SPRITE_TABLE_ADDRESS)
-		// 	// nameTableControl := ppu.getControlSetting(NAMETABLE_ADDRESS)
-		// 	// var nameTableAddress uint16
-		// 	// switch nameTableControl {
-		// 	// case 0b00:
-		// 	// 	nameTableAddress = 0x2000
-		// 	// case 0b01:
-		// 	// 	nameTableAddress = 0x2400
-		// 	// case 0b10:
-		// 	// 	nameTableAddress = 0x2800
-		// 	// case 0b11:
-		// 	// 	nameTableAddress = 0x2C00
-		// 	// }
-		// 	ppu.CurrentFrame.RenderNameTable(0x2000, uint(backgroundRomBank))
-		// 	ppu.CurrentFrame.RenderOam(uint(oamRomBank))
-		// }
-		//
-		// if ppu.cycles == 0 {
-		// 	ppu.cycles += 1
-		// } else if ppu.cycles >= 1 && ppu.cycles <= 256 {
-		// 	if ppu.scanlines >= 240 {
-		// 		ppu.cycles += 1
-		// 	} else {
-		// 		// push pixel to screen (for debugging)
-		// 		// address := (ppu.cycles-1)*3 + ppu.scanlines*3*XSIZE
-		// 		// ppu.CurrentPixelBuffer[address] = ppu.CurrentFrame.PixelData[address]
-		// 		// ppu.CurrentPixelBuffer[address+1] = ppu.CurrentFrame.PixelData[address+1]
-		// 		// ppu.CurrentPixelBuffer[address+2] = ppu.CurrentFrame.PixelData[address+2]
-		// 		ppu.cycles += 1
-		// 	}
-		// } else if ppu.cycles >= 257 && ppu.cycles <= 340 {
-		// 	ppu.cycles += 1
-		// } else if ppu.cycles >= 341 {
-		// 	ppu.cycles -= 341
-		// 	ppu.scanlines += 1
-		//
-		// 	// Vblank, send NMI interrupt if enabled and set flag
-		// 	if ppu.scanlines >= 241 {
-		// 		ppu.setVblankStatus(1)
-		// 		if ppu.getControlSetting(VBLANK_NMI_ENABLE) == 1 {
-		// 			ppu.NmiInterrupt = true
-		// 		}
-		// 	}
-		// 	if ppu.scanlines >= 262 {
-		// 		ppu.setVblankStatus(0)
-		// 		ppu.NmiInterrupt = false
-		// 		ppu.scanlines = 0
-		// 	}
-		// }
 	}
 }
 
@@ -248,8 +196,8 @@ func (ppu *Ppu) getMaskSetting(setting string) uint8 {
 // ----- PPUSTATUS 0x2002 REGISTER -----
 
 func (ppu *Ppu) ReadPpuStatusRegister() uint8 {
-	ppu.writeToggle = false
 	status := ppu.ppuStatus
+	ppu.writeToggle = false
 	ppu.setVblankStatus(0)
 	return status
 }
@@ -263,11 +211,12 @@ func (ppu *Ppu) setVblankStatus(val uint8) {
 }
 
 func (ppu *Ppu) setSpriteZeroHit() {
-	if ppu.hasSpriteZeroCollision {
-		if ppu.cycles == ppu.collisionCycle && ppu.collisionScanline == ppu.scanlines {
-			ppu.ppuStatus |= 1 << 6
-		}
-	}
+	// if ppu.hasSpriteZeroCollision {
+	// 	if ppu.cycles == ppu.collisionCycle && ppu.collisionScanline == ppu.scanlines {
+	// 		ppu.ppuStatus |= 1 << 6
+	// 	}
+	// }
+	ppu.ppuStatus |= 1 << 6
 }
 
 func (ppu *Ppu) clearSpriteZeroHit() {
@@ -294,7 +243,7 @@ func (ppu *Ppu) ReadOamDataRegister() uint8 {
 // ----- PPUSCROLL 0x2005 REGISTER -----
 
 func (ppu *Ppu) WriteToPpuScroll(val uint8) {
-	if ppu.writeToggle {
+	if !ppu.writeToggle {
 		ppu.ppuScrollX = val
 	} else {
 		ppu.ppuScrollY = val
@@ -357,5 +306,5 @@ func (ppu *Ppu) WriteToPpuDataRegister(val uint8) {
 // ----- DEBUG -----
 
 func (ppu *Ppu) TracePpuStatus() string {
-	return fmt.Sprintf("PPU:%03d, %03d  ADDR: %04X CTRL:%08b", ppu.scanlines, ppu.cycles, ppu.ppuAddr, ppu.ppuCtrl)
+	return fmt.Sprintf("PPU:%03d, %03d  ADDR: %04X CTRL:%08b STATUS: %08b", ppu.scanlines, ppu.cycles, ppu.ppuAddr, ppu.ppuCtrl, ppu.ppuStatus)
 }

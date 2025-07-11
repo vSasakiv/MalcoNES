@@ -7,7 +7,7 @@ import (
 const XSIZE = 256
 const YSIZE = 240
 const DEFAULT_BG_PALETTE_ADDRESS = 0x3F00
-const DEFAULT_OAM_PALETTE_ADDRESS = 0x3F11
+const DEFAULT_OAM_PALETTE_ADDRESS = 0x3F10
 const NAMETABLE_SIZE = 0x03C0
 
 type Frame struct {
@@ -85,22 +85,70 @@ func (frame *Frame) renderOamTile(tile [16]uint8, tileX uint, tileY uint, palett
 }
 
 type View struct {
-	x, y, width, height uint8
+	x, y, width, height int
 }
 
 func (frame *Frame) RenderBackground(baseNameTableAddress uint16, tileBank uint, scrollX uint8, scrollY uint8, greyscale uint8) {
 	nextNameTableAddress := GetNextNameTableAddress(baseNameTableAddress)
+	baseTableView := View{x: int(scrollX), y: int(scrollY), width: XSIZE - int(scrollX), height: YSIZE - int(scrollY)}
+	nextTableView := View{x: 0, y: 0, width: int(scrollX), height: int(scrollY)}
 
-	baseTableView := View{x: scrollX, y: scrollY, width: (255 - scrollX), height: (239 - scrollY)}
-	nextTableView := View{x: 0, y: 0, width: scrollX, height: scrollY}
-
-	frame.renderNameTable(baseNameTableAddress, tileBank, baseTableView, greyscale)
-	frame.renderNameTable(nextNameTableAddress, tileBank, nextTableView, greyscale)
+	frame.renderNameTable(baseNameTableAddress, tileBank, baseTableView, -int(scrollX), -int(scrollY), greyscale)
+	frame.renderNameTable(nextNameTableAddress, tileBank, nextTableView, XSIZE-int(scrollX), YSIZE-int(scrollY), greyscale)
 }
 
-func (frame *Frame) renderNameTable(nameTableAddress uint16, tileBank uint, view View, greyscale uint8) {
+func (frame *Frame) renderNameTable(nameTableAddress uint16, tileBank uint, view View, shiftx int, shifty int, greyscale uint8) {
+
+	tileAddress := uint16(tileBank) * 0x1000
+
+	tileStartX := view.x / 8
+	tileStartY := view.y / 8
+	tileEndX := (view.width + view.x) / 8
+	tileEndY := (view.height + view.y) / 8
+	// fmt.Printf("startX: %03d startY: %03d endx: %03d endt: %03d\n", tileStartX, tileStartY, tileEndX, tileEndY)
+
+	for y := tileStartY; y < tileEndY; y++ {
+		for x := tileStartX; x < tileEndX; x++ {
+			idx := uint16(x) + 32*uint16(y)
+			nameTableEntry := PpuMemRead(nameTableAddress + idx)
+			tile := PpuMemReadTile(tileAddress + 0x10*uint16(nameTableEntry))
+			palette := GetBackgroundPalette(nameTableAddress, idx, greyscale)
+			frame.conditionalRenderScrollTile(tile, uint(idx), view, shiftx, shifty, palette)
+		}
+	}
 	// 30 x 32 tiles
 	// TODO
+}
+
+func (frame *Frame) conditionalRenderScrollTile(tile [16]uint8, tileN uint, view View, shiftx int, shifty int, palette [4][3]uint8) {
+	// rendering full tile
+	var fullTile [64]uint8
+	for i := range 8 {
+		for j := range 8 {
+			lsb := tile[i] >> (8 - j - 1) & 0b1
+			msb := tile[i+8] >> (8 - j - 1) & 0b1
+			fullTile[j+8*i] = lsb | (msb << 1)
+		}
+	}
+	tileX := (tileN % 32) * 8
+	tileY := (tileN / 32) * 8
+
+	for i, pix := range fullTile {
+		pixX := int(tileX + uint(i%8))
+		pixY := int(tileY + uint(i/8))
+		// dont render border pixels
+		if pixX < view.x || pixY < view.y || pixX >= (view.x+view.width) || pixY >= (view.y+view.height) {
+			continue
+		}
+		// transparency matrix
+		if pix == 0b00 {
+			frame.TransparencyMatrix[pixX+shiftx][pixY+shifty] = 0
+		} else {
+			frame.TransparencyMatrix[pixX+shiftx][pixY+shifty] = 1
+		}
+		rgb := palette[pix]
+		frame.setPixel(uint(pixX+shiftx), uint(pixY+shifty), rgb)
+	}
 }
 
 func (frame *Frame) RenderNameTable(nameTableAddress uint16, tileBank uint, greyscale uint8) {
@@ -171,17 +219,17 @@ func getOamSpritePallete(paletteIdx uint8, greyscale uint8) [4][3]uint8 {
 	paletteStart := uint16(DEFAULT_OAM_PALETTE_ADDRESS) + uint16(paletteIdx)*4
 	if greyscale == 1 {
 		return [4][3]uint8{
-			0b00: ppu.systemPalette[PpuMemRead(DEFAULT_OAM_PALETTE_ADDRESS)&0x30],
-			0b01: ppu.systemPalette[PpuMemRead(paletteStart)&0x30],
-			0b10: ppu.systemPalette[PpuMemRead(paletteStart+1)&0x30],
-			0b11: ppu.systemPalette[PpuMemRead(paletteStart+2)&0x30],
+			0b00: ppu.systemPalette[PpuMemRead(paletteStart)&0x30],
+			0b01: ppu.systemPalette[PpuMemRead(paletteStart+1)&0x30],
+			0b10: ppu.systemPalette[PpuMemRead(paletteStart+2)&0x30],
+			0b11: ppu.systemPalette[PpuMemRead(paletteStart+3)&0x30],
 		}
 	}
 	return [4][3]uint8{
-		0b00: ppu.systemPalette[PpuMemRead(DEFAULT_OAM_PALETTE_ADDRESS)],
-		0b01: ppu.systemPalette[PpuMemRead(paletteStart)],
-		0b10: ppu.systemPalette[PpuMemRead(paletteStart+1)],
-		0b11: ppu.systemPalette[PpuMemRead(paletteStart+2)],
+		0b00: ppu.systemPalette[PpuMemRead(paletteStart)],
+		0b01: ppu.systemPalette[PpuMemRead(paletteStart+1)],
+		0b10: ppu.systemPalette[PpuMemRead(paletteStart+2)],
+		0b11: ppu.systemPalette[PpuMemRead(paletteStart+3)],
 	}
 }
 
@@ -219,7 +267,7 @@ func (frame *Frame) spriteZeroCollision(tileBank uint) (bool, uint, uint) {
 		}
 		// pix and background are opaque
 		if pix != 0b00 && frame.TransparencyMatrix[pixX][pixY] == 1 {
-			return true, pixX, pixY + 1
+			return true, pixX + 2, pixY + 1
 		}
 	}
 	return false, 0, 0
@@ -234,7 +282,7 @@ func GetBackgroundPalette(nameTableAddress uint16, tileN uint16, greyscale uint8
 
 	subTileX := (tileX % 4) / 2
 	subTileY := (tileY % 4) / 2
-	paletteStart := uint16(DEFAULT_BG_PALETTE_ADDRESS) + 1
+	paletteStart := uint16(DEFAULT_BG_PALETTE_ADDRESS)
 	switch {
 	// top left tiles
 	case subTileX == 0 && subTileY == 0:
@@ -253,17 +301,17 @@ func GetBackgroundPalette(nameTableAddress uint16, tileN uint16, greyscale uint8
 	if greyscale == 1 {
 		return [4][3]uint8{
 			0b00: ppu.systemPalette[PpuMemRead(DEFAULT_BG_PALETTE_ADDRESS)&0x30],
-			0b01: ppu.systemPalette[PpuMemRead(paletteStart)&0x30],
-			0b10: ppu.systemPalette[PpuMemRead(paletteStart+1)&0x30],
-			0b11: ppu.systemPalette[PpuMemRead(paletteStart+2)&0x30],
+			0b01: ppu.systemPalette[PpuMemRead(paletteStart+1)&0x30],
+			0b10: ppu.systemPalette[PpuMemRead(paletteStart+2)&0x30],
+			0b11: ppu.systemPalette[PpuMemRead(paletteStart+3)&0x30],
 		}
 	}
 
 	return [4][3]uint8{
 		0b00: ppu.systemPalette[PpuMemRead(DEFAULT_BG_PALETTE_ADDRESS)],
-		0b01: ppu.systemPalette[PpuMemRead(paletteStart)],
-		0b10: ppu.systemPalette[PpuMemRead(paletteStart+1)],
-		0b11: ppu.systemPalette[PpuMemRead(paletteStart+2)],
+		0b01: ppu.systemPalette[PpuMemRead(paletteStart+1)],
+		0b10: ppu.systemPalette[PpuMemRead(paletteStart+2)],
+		0b11: ppu.systemPalette[PpuMemRead(paletteStart+3)],
 	}
 }
 

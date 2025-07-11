@@ -57,7 +57,12 @@ func PpuMemWrite(addr uint16, val uint8) {
 		PpuMemory.vram[mirrorVramAddress(addr)] = val
 	} else if addr >= 0x3F00 {
 		addr = (addr - 0x3F00) % 0x20
-		PpuMemory.paletteRam[addr] = val
+		if addr%4 == 0 {
+			PpuMemory.paletteRam[addr&0x0F] = val
+			PpuMemory.paletteRam[addr|0x10] = val
+		} else {
+			PpuMemory.paletteRam[addr] = val
+		}
 	}
 }
 
