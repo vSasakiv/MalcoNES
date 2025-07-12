@@ -6,8 +6,6 @@ import (
 
 const XSIZE = 256
 const YSIZE = 240
-const DEFAULT_BG_PALETTE_ADDRESS = 0x3F00
-const DEFAULT_OAM_PALETTE_ADDRESS = 0x3F10
 const NAMETABLE_SIZE = 0x03C0
 
 type Frame struct {

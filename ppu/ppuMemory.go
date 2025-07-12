@@ -39,6 +39,7 @@ func LoadFromCartridge(cartridge cartridge.Cartridge) {
 }
 
 func PpuMemRead(addr uint16) uint8 {
+	addr = addr % 0x4000
 	if addr <= 0x1FFF {
 		return readChrRom(addr)
 	} else if addr >= 0x2000 && addr <= 0x3EFF {
@@ -51,6 +52,7 @@ func PpuMemRead(addr uint16) uint8 {
 }
 
 func PpuMemWrite(addr uint16, val uint8) {
+	addr = addr % 0x4000
 	if addr <= 0x1FFF {
 		fmt.Println("PpuMemWrite: Cannot write to rom addr:", addr)
 	} else if addr >= 0x2000 && addr <= 0x3EFF {

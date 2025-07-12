@@ -68,6 +68,7 @@ func (g *Game) Update() error {
 		cycles += int(cpu.GetCpu().LastInstructionCycles)
 	}
 
+	// time.Sleep(time.Second)
 	// Update pixels
 	rgb := ppu.GetPpu().CurrentFrame.GetPixelData()
 	convertRGB24ToRGBA(g.pixels, rgb)
@@ -115,8 +116,8 @@ func ifPressed(key ebiten.Key) uint {
 
 func tick() {
 	cpu.ExecuteNext()
-	ppu.Execute(cpu.GetCpu().LastInstructionCycles * 3)
-	// fmt.Println(ppu.GetPpu().TracePpuStatus())
+	ppu.ExecuteLoopy(cpu.GetCpu().LastInstructionCycles * 3)
+	// fmt.Println(cpu.GetCpu().TraceStatus())
 }
 
 // func handleEvent(joyPad *controller.JoyPad, event sdl.Event) {
