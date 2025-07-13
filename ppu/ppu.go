@@ -402,8 +402,8 @@ func (ppu *Ppu) renderPixel() {
 		if ppu.spriteLine[i][diff] == 0 {
 			continue
 		}
-		// if sprite has priority, we render it
-		if ppu.spritePriority[i] == 0 {
+		// if sprite has priority or background is transparent we render it
+		if ppu.spritePriority[i] == 0 || ppu.outputBackgroundVal[ppu.fineX] == 0 {
 			rgb = ppu.spritePalette[i][ppu.spriteLine[i][diff]]
 		}
 		// background is not transparent

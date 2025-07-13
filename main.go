@@ -37,7 +37,7 @@ func main() {
 	ebiten.SetWindowTitle("My Emulator (debug)")
 
 	// setup and load cartridge
-	nestest := cartridge.ReadFromFile("./testFiles/pacman.nes")
+	nestest := cartridge.ReadFromFile("./testFiles/supermario.nes")
 
 	memory.LoadFromCartridge(nestest)
 
