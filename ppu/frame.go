@@ -213,24 +213,6 @@ func flipTile(tile [16]uint8, flipHorizontal bool, flipVertical bool) [16]uint8 
 	return tile
 }
 
-func getOamSpritePallete(paletteIdx uint8, greyscale uint8) [4][3]uint8 {
-	paletteStart := uint16(DEFAULT_OAM_PALETTE_ADDRESS) + uint16(paletteIdx)*4
-	if greyscale == 1 {
-		return [4][3]uint8{
-			0b00: ppu.systemPalette[PpuMemRead(paletteStart)&0x30],
-			0b01: ppu.systemPalette[PpuMemRead(paletteStart+1)&0x30],
-			0b10: ppu.systemPalette[PpuMemRead(paletteStart+2)&0x30],
-			0b11: ppu.systemPalette[PpuMemRead(paletteStart+3)&0x30],
-		}
-	}
-	return [4][3]uint8{
-		0b00: ppu.systemPalette[PpuMemRead(paletteStart)],
-		0b01: ppu.systemPalette[PpuMemRead(paletteStart+1)],
-		0b10: ppu.systemPalette[PpuMemRead(paletteStart+2)],
-		0b11: ppu.systemPalette[PpuMemRead(paletteStart+3)],
-	}
-}
-
 func (frame *Frame) spriteZeroCollision(tileBank uint) (bool, uint, uint) {
 	tileAddress := uint16(tileBank) * 0x1000
 	tileY := PpuOamRead(0)

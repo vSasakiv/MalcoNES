@@ -1,6 +1,8 @@
 package ppu
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // ppu control settings
 const NAMETABLE_ADDRESS = "NAMETABLE_ADDRESS"
@@ -51,23 +53,32 @@ type Ppu struct {
 	vramAddress        uint16
 	CurrentFrame       Frame
 	CurrentPixelBuffer [XSIZE * YSIZE * 3]uint8
-	// sprite zero collision state
-	hasSpriteZeroCollision            bool
-	collisionCycle, collisionScanline uint
+	spriteLine         [8][8]uint8
+	spritePosition     [8]uint8
+	spritePalette      [8][4][3]uint8
+	spriteNumber       [8]uint8
+	spritePriority     [8]uint8
+	spriteCount        uint
 
 	// ppu internal registers
-	loopyV            uint16
-	loopyT            uint16
-	fineX             uint8
-	write             uint8
-	outputPixelBuffer [][3]uint8
+	loopyV uint16
+	loopyT uint16
+	fineX  uint8
+	write  uint8
+	// output buffers
+	outputPixelBuffer   [][3]uint8
+	outputBackgroundRgb [][3]uint8
+	outputBackgroundVal []uint8
 }
 
 // Initialize ppu with corret parameters, also initialize system palette
 func NewPpu() *Ppu {
 	var ppu Ppu
-	ppu.hasSpriteZeroCollision = false
+
 	ppu.outputPixelBuffer = make([][3]uint8, 16)
+	ppu.outputBackgroundRgb = make([][3]uint8, 16)
+	ppu.outputBackgroundVal = make([]uint8, 16)
+
 	ppu.cycles = 340
 	ppu.scanlines = 240
 	ppu.systemPalette = GenerateFromPalFile("./ppu/palettes/2C02.pal")
@@ -95,18 +106,17 @@ func ExecuteLoopy(cycles uint) {
 		preRenderCopyY := ppu.cycles >= 280 && ppu.cycles <= 304
 		vblank := ppu.scanlines == 241 && ppu.cycles == 1
 		vblankEnd := preRenderScanline && ppu.cycles == 1
+		spriteEvaluate := visibleScanlines && ppu.cycles == 257
 
 		// rendering visible scanlines
 		if ppu.getMaskSetting(ENABLE_BACKGROUND) == 1 {
 			if visibleScanlines {
 				if visibleCycles {
 					// draw pixel from output buffer
-					ppu.CurrentFrame.setPixel(ppu.cycles-1, ppu.scanlines, ppu.outputPixelBuffer[ppu.fineX])
-					// shift pixel buffer
-					ppu.outputPixelBuffer = ShiftBufferLeft(ppu.outputPixelBuffer)
+					ppu.renderPixel()
 					// if cycle is 8, 16, 24 ... reload shift register and update loopyV
 					if ppu.cycles%8 == 0 {
-						ppu.reloadPixelBuffer()
+						ppu.reloadBackgroundBuffer()
 						ppu.incrementLoopyVX()
 					}
 				}
@@ -120,20 +130,28 @@ func ExecuteLoopy(cycles uint) {
 				}
 				// load first tile
 				if ppu.cycles == 327 {
-					ppu.reloadPixelBuffer()
+					ppu.reloadBackgroundBuffer()
 					ppu.incrementLoopyVX()
 				}
 				// load second tile
 				if ppu.cycles == 335 {
 					for range 8 {
-						ppu.outputPixelBuffer = ShiftBufferLeft(ppu.outputPixelBuffer)
+						// shift background buffers
+						ppu.outputBackgroundVal = ShiftValBufferLeft(ppu.outputBackgroundVal)
+						ppu.outputBackgroundRgb = ShiftRgbBufferLeft(ppu.outputBackgroundRgb)
 					}
-					ppu.reloadPixelBuffer()
+					ppu.reloadBackgroundBuffer()
 					ppu.incrementLoopyVX()
 				}
 			}
 			if preRenderScanline && preRenderCopyY {
 				ppu.copyScrollyToLoopyV()
+			}
+		}
+
+		if ppu.getMaskSetting(ENABLE_SPRITE) == 1 {
+			if spriteEvaluate {
+				ppu.evaluateSprites()
 			}
 		}
 
@@ -145,111 +163,9 @@ func ExecuteLoopy(cycles uint) {
 		}
 		if vblankEnd {
 			ppu.NmiInterrupt = false
+			ppu.clearSpriteZeroHit()
 			ppu.setVblankStatus(0)
 		}
-
-		// if visibleScanlines {
-		// 	// idle cycle
-		// 	if ppu.cycles == 0 {
-		// 		ppu.cycles += 1
-		// 	} else
-		// 	// render scanline 1, 2, 3, 4
-		// 	if visibleCycles {
-		// 		// draw pixel from output buffer
-		// 		ppu.CurrentFrame.setPixel(ppu.cycles-1, ppu.scanlines, ppu.outputPixelBuffer[ppu.fineX])
-		// 		// shift pixel buffer
-		// 		ppu.outputPixelBuffer = ShiftBufferLeft(ppu.outputPixelBuffer)
-		// 		// if cycle is 8, 16, 24 ... reload shift register and update loopyV
-		// 		if ppu.cycles%8 == 0 {
-		// 			ppu.reloadPixelBuffer()
-		// 			ppu.incrementLoopyVX()
-		// 		}
-		// 		ppu.cycles += 1
-		// 	} else if ppu.cycles >= 257 && ppu.cycles <= 340 {
-		//
-		// 		if ppu.cycles == 257 {
-		// 			ppu.incrementLoopyVY()
-		// 		}
-		// 		if ppu.cycles == 258 {
-		// 			ppu.copyScrollxToLoopyV()
-		// 		}
-		// 		if ppu.cycles == 327 {
-		// 			ppu.reloadPixelBuffer()
-		// 			ppu.incrementLoopyVX()
-		// 		}
-		// 		if ppu.cycles == 335 {
-		// 			for range 8 {
-		// 				ppu.outputPixelBuffer = ShiftBufferLeft(ppu.outputPixelBuffer)
-		// 			}
-		// 			ppu.reloadPixelBuffer()
-		// 			ppu.incrementLoopyVX()
-		// 		}
-		// 		ppu.cycles += 1
-		// 	} else
-		// 	// incremenet scanline
-		// 	if ppu.cycles >= 341 {
-		// 		ppu.cycles = 0
-		// 		ppu.scanlines += 1
-		// 	}
-		// } else
-		// // idle scanline
-		// if ppu.scanlines == 240 {
-		// 	if ppu.cycles >= 341 {
-		// 		ppu.cycles = 0
-		// 		ppu.scanlines += 1
-		// 	} else {
-		// 		ppu.cycles += 1
-		// 	}
-		// } else
-		// // vblank
-		// if ppu.scanlines >= 241 && ppu.scanlines <= 260 {
-		// 	// vblank enable at tick 2 of scanline 241
-		// 	if ppu.scanlines == 241 && ppu.cycles == 2 {
-		// 		if ppu.getControlSetting(VBLANK_NMI_ENABLE) == 1 {
-		// 			ppu.NmiInterrupt = true
-		// 		}
-		// 		ppu.setVblankStatus(1)
-		// 		ppu.cycles += 1
-		// 	} else if ppu.cycles >= 341 {
-		// 		ppu.cycles = 0
-		// 		ppu.scanlines += 1
-		// 	} else {
-		// 		ppu.cycles += 1
-		// 	}
-		// } else
-		// // pre render
-		// if ppu.scanlines == 261 {
-		// 	if ppu.cycles == 0 {
-		// 		ppu.setVblankStatus(0)
-		// 		ppu.NmiInterrupt = false
-		// 		ppu.cycles += 1
-		// 	} else
-		// 	// TODO
-		// 	if ppu.cycles == 258 {
-		// 		ppu.copyScrollxToLoopyV()
-		// 		ppu.cycles += 1
-		// 	} else if ppu.cycles >= 281 && ppu.cycles <= 305 {
-		// 		ppu.copyScrollyToLoopyV()
-		// 		ppu.cycles += 1
-		// 	} else if ppu.cycles == 327 {
-		// 		ppu.reloadPixelBuffer()
-		// 		ppu.incrementLoopyVX()
-		// 		ppu.cycles += 1
-		// 	} else if ppu.cycles == 335 {
-		// 		for range 8 {
-		// 			ppu.outputPixelBuffer = ShiftBufferLeft(ppu.outputPixelBuffer)
-		// 		}
-		// 		ppu.reloadPixelBuffer()
-		// 		ppu.incrementLoopyVX()
-		// 		ppu.cycles += 1
-		// 	} else if ppu.cycles >= 341 {
-		// 		ppu.CurrentFrame.RenderOam(uint(ppu.getControlSetting(SPRITE_TABLE_ADDRESS)), ppu.getMaskSetting(GREYSCALE))
-		// 		ppu.cycles = 0
-		// 		ppu.scanlines = 0
-		// 	} else {
-		// 		ppu.cycles += 1
-		// 	}
-		// }
 	}
 }
 
@@ -260,65 +176,6 @@ func (ppu *Ppu) runCycle() {
 		ppu.scanlines += 1
 		if ppu.scanlines == 262 {
 			ppu.scanlines = 0
-		}
-	}
-}
-
-func Execute(cycles uint) {
-
-	for range cycles {
-		ppu.cycles += 1
-		ppu.setSpriteZeroHit()
-		if ppu.cycles >= 341 {
-			ppu.cycles = 0
-			ppu.scanlines += 1
-			// when activating vblank, disable spriteZeroCollision
-			if ppu.scanlines == 241 {
-				ppu.clearSpriteZeroHit()
-				ppu.hasSpriteZeroCollision = false
-				ppu.setVblankStatus(1)
-
-				if ppu.getControlSetting(VBLANK_NMI_ENABLE) == 1 {
-					ppu.NmiInterrupt = true
-				}
-			}
-			if ppu.scanlines >= 262 {
-				ppu.scanlines = 0
-
-				ppu.clearSpriteZeroHit()
-
-				ppu.setVblankStatus(0)
-				ppu.NmiInterrupt = false
-				backgroundRomBank := ppu.getControlSetting(BACKGROUND_TABLE_ADDRESS)
-				oamRomBank := ppu.getControlSetting(SPRITE_TABLE_ADDRESS)
-
-				greyscale := ppu.getMaskSetting(GREYSCALE)
-
-				if ppu.getMaskSetting(ENABLE_BACKGROUND) == 1 {
-					nameTableControl := ppu.getControlSetting(NAMETABLE_ADDRESS)
-					var baseNameTable uint16
-					switch nameTableControl {
-					case 0b00:
-						baseNameTable = 0x2000
-					case 0b01:
-						baseNameTable = 0x2400
-					case 0b10:
-						baseNameTable = 0x2800
-					case 0b11:
-						baseNameTable = 0x2C00
-					}
-					ppu.CurrentFrame.RenderBackground(baseNameTable, uint(backgroundRomBank), ppu.ppuScrollX, ppu.ppuScrollY, greyscale)
-					// ppu.CurrentFrame.RenderNameTable(0x2000, uint(backgroundRomBank), greyscale)
-				} else {
-					ppu.CurrentFrame.RenderEmptyBackground()
-				}
-
-				// renders sprites and detects sprite zero collision
-				if ppu.getMaskSetting(ENABLE_SPRITE) == 1 {
-					ppu.CurrentFrame.RenderOam(uint(oamRomBank), greyscale)
-					ppu.hasSpriteZeroCollision, ppu.collisionCycle, ppu.collisionScanline = ppu.CurrentFrame.spriteZeroCollision(uint(oamRomBank))
-				}
-			}
 		}
 	}
 }
@@ -529,21 +386,52 @@ func (ppu *Ppu) WriteToPpuDataRegister(val uint8) {
 	ppu.incrementAddrRegister()
 }
 
-// ----- Rendering -----
+// ----- Rendering
 
-func (ppu *Ppu) reloadPixelBuffer() {
-	pixelGroup := ppu.getPixelGroup()
-	ppu.outputPixelBuffer[8] = pixelGroup[0]
-	ppu.outputPixelBuffer[9] = pixelGroup[1]
-	ppu.outputPixelBuffer[10] = pixelGroup[2]
-	ppu.outputPixelBuffer[11] = pixelGroup[3]
-	ppu.outputPixelBuffer[12] = pixelGroup[4]
-	ppu.outputPixelBuffer[13] = pixelGroup[5]
-	ppu.outputPixelBuffer[14] = pixelGroup[6]
-	ppu.outputPixelBuffer[15] = pixelGroup[7]
+func (ppu *Ppu) renderPixel() {
+
+	rgb := ppu.outputBackgroundRgb[ppu.fineX]
+
+	for i := range ppu.spriteCount {
+		diff := int(ppu.cycles-1) - int(ppu.spritePosition[i])
+		// sprite is not at this x
+		if diff < 0 || diff > 7 {
+			continue
+		}
+		// sprite is transparent
+		if ppu.spriteLine[i][diff] == 0 {
+			continue
+		}
+		// if sprite has priority, we render it
+		if ppu.spritePriority[i] == 0 {
+			rgb = ppu.spritePalette[i][ppu.spriteLine[i][diff]]
+		}
+		// background is not transparent
+		if ppu.outputBackgroundVal[ppu.fineX] != 0 && ppu.spriteNumber[i] == 0 {
+			ppu.setSpriteZeroHit()
+		}
+		break
+	}
+
+	// if no sprite is rendered, render background instead
+	ppu.CurrentFrame.setPixel(ppu.cycles-1, ppu.scanlines, rgb)
+	// shift background buffers
+	ppu.outputBackgroundVal = ShiftValBufferLeft(ppu.outputBackgroundVal)
+	ppu.outputBackgroundRgb = ShiftRgbBufferLeft(ppu.outputBackgroundRgb)
+
 }
 
-func (ppu *Ppu) getPixelGroup() [8][3]uint8 {
+// ----- Background Rendering -----
+
+func (ppu *Ppu) reloadBackgroundBuffer() {
+	valueGroup, pixelGroup := ppu.getBackgroundGroup()
+	for i := range 8 {
+		ppu.outputBackgroundRgb[8+i] = pixelGroup[i]
+		ppu.outputBackgroundVal[8+i] = valueGroup[i]
+	}
+}
+
+func (ppu *Ppu) getBackgroundGroup() ([8]uint8, [8][3]uint8) {
 	// coarseX := ppu.loopyV & 0x001F
 	// coarseY := (ppu.loopyV >> 5) & 0x001F
 
@@ -594,24 +482,93 @@ func (ppu *Ppu) getPixelGroup() [8][3]uint8 {
 		}
 	}
 
-	// get tile in flat format
-	var fullTile [64]uint8
-	for i := range 8 {
-		for j := range 8 {
-			lsb := tile[i] >> (8 - j - 1) & 0b1
-			msb := tile[i+8] >> (8 - j - 1) & 0b1
-			fullTile[j+8*i] = lsb | (msb << 1)
-		}
-	}
-
 	var pixelGroup [8][3]uint8
+	var valGroup [8]uint8
 	// fineY to select line of 8 pixels from tile
 	fineY := (ppu.loopyV >> 12) & 0b111
-	for i := range uint16(8) {
-		pix := fullTile[i+8*fineY]
+
+	for i := range 8 {
+		lsb := tile[fineY] >> (8 - i - 1) & 0b1
+		msb := tile[fineY+8] >> (8 - i - 1) & 0b1
+		pix := lsb | (msb << 1)
+		valGroup[i] = pix
 		pixelGroup[i] = palette[pix] // gets rgb of pixel
 	}
-	return pixelGroup
+
+	return valGroup, pixelGroup
+}
+
+// ----- Sprite Rendering -----
+
+func (ppu *Ppu) evaluateSprites() {
+	tileAddress := uint16(ppu.getControlSetting(SPRITE_TABLE_ADDRESS)) * 0x1000
+	count := uint(0)
+	for i := range uint8(64) {
+		idx := (i * 4)
+
+		pixY := PpuOamRead(idx)
+		pixX := PpuOamRead(idx + 3)
+		tileIdx := PpuOamRead(idx + 1)
+		attrb := PpuOamRead(idx + 2)
+
+		diff := int(ppu.scanlines) - int(pixY)
+		// sprite is not in this scanline
+		if diff < 0 || diff >= 8 {
+			continue
+		}
+
+		tile := PpuMemReadTile(tileAddress + 0x10*uint16(tileIdx))
+		flipHorizontal := (attrb>>6)&0b1 == 1
+		flipVertical := (attrb>>7)&0b1 == 1
+		tile = flipTile(tile, flipHorizontal, flipVertical)
+
+		paletteIdx := attrb & 0b11
+
+		if count < 8 {
+			ppu.spriteLine[count] = getSpriteLine(tile[:], diff)
+			ppu.spritePosition[count] = pixX
+			ppu.spritePalette[count] = getOamSpritePallete(paletteIdx, ppu.getMaskSetting(GREYSCALE))
+			ppu.spriteNumber[count] = i
+			ppu.spritePriority[count] = (attrb >> 5) & 0b1
+		}
+
+		count += 1
+
+		// frame.renderOamTile(tile, uint(tileX), uint(tileY), palette)
+	}
+	if count > 8 {
+		count = 8
+	}
+	ppu.spriteCount = count
+}
+
+func getSpriteLine(tile []uint8, diff int) [8]uint8 {
+	var spriteLine [8]uint8
+
+	for i := range 8 {
+		lsb := tile[diff] >> (8 - i - 1) & 0b1
+		msb := tile[diff+8] >> (8 - i - 1) & 0b1
+		spriteLine[i] = lsb | (msb << 1)
+	}
+	return spriteLine
+}
+
+func getOamSpritePallete(paletteIdx uint8, greyscale uint8) [4][3]uint8 {
+	paletteStart := uint16(DEFAULT_OAM_PALETTE_ADDRESS) + uint16(paletteIdx)*4
+	if greyscale == 1 {
+		return [4][3]uint8{
+			0b00: ppu.systemPalette[PpuMemRead(paletteStart)&0x30],
+			0b01: ppu.systemPalette[PpuMemRead(paletteStart+1)&0x30],
+			0b10: ppu.systemPalette[PpuMemRead(paletteStart+2)&0x30],
+			0b11: ppu.systemPalette[PpuMemRead(paletteStart+3)&0x30],
+		}
+	}
+	return [4][3]uint8{
+		0b00: ppu.systemPalette[PpuMemRead(paletteStart)],
+		0b01: ppu.systemPalette[PpuMemRead(paletteStart+1)],
+		0b10: ppu.systemPalette[PpuMemRead(paletteStart+2)],
+		0b11: ppu.systemPalette[PpuMemRead(paletteStart+3)],
+	}
 }
 
 // ----- Internal registers -----
@@ -687,9 +644,15 @@ func SetBitToZero(n uint16, pos uint) uint16 {
 	return n & ^(1 << pos)
 }
 
-func ShiftBufferLeft(slice [][3]uint8) [][3]uint8 {
+func ShiftRgbBufferLeft(slice [][3]uint8) [][3]uint8 {
 	copy(slice, slice[1:])
 	slice[len(slice)-1] = [3]uint8{0, 0, 0}
+	return slice
+}
+
+func ShiftValBufferLeft(slice []uint8) []uint8 {
+	copy(slice, slice[1:])
+	slice[len(slice)-1] = 0
 	return slice
 }
 
