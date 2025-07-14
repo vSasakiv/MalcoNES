@@ -2,7 +2,6 @@ package cartridge
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,9 +9,11 @@ import (
 
 type Cartridge struct {
 	PrgRom        []uint8
-	PrgRomSize    uint16
+	PrgRomSize    uint
 	ChrRom        []uint8
-	ChrRomSize    uint16
+	ChrRomSize    uint
+	ChrRam        []uint8
+	ChrRamSize    uint
 	Trainer       []uint8
 	HasTrainer    bool
 	MapperType    uint8
@@ -67,23 +68,33 @@ func ReadFromFile(path string) Cartridge {
 		panic("Error reading from file")
 	}
 	cartridge.ChrRom = chrRom
+
+	cartridge.ChrRam = make([]byte, cartridge.ChrRamSize)
+
 	return cartridge
 }
 
-func (cartridge *Cartridge) readHeader(header []uint8) error {
+func (cartridge *Cartridge) readHeader(header []uint8) {
 
 	if header[0] != 0x4E || header[1] != 0x45 || header[2] != 0x53 || header[3] != 0x1A {
-		return errors.New("File is not and iNES file!")
+		fmt.Println("File is not and iNES file!")
+		return
 	}
 
-	cartridge.PrgRomSize = uint16(header[4]) * 0x4000
-	cartridge.ChrRomSize = uint16(header[5]) * 0x2000
+	cartridge.PrgRomSize = uint(header[4]) * 0x4000
+	cartridge.ChrRomSize = uint(header[5]) * 0x2000
+
+	// chr ram
+	if cartridge.ChrRomSize == 0 {
+		cartridge.ChrRamSize = 0x2000
+	}
 
 	control1 := header[6]
 	control2 := header[7]
 
 	if control2&0b1 == 1 || (control2>>1)&0b1 == 1 || (control2>>2)&0b11 == 0b10 {
-		return errors.New("File is not and iNES 1.0 file! iNES 2.0 is not supported")
+		fmt.Println("File is not and iNES 1.0 file! iNES 2.0 is not supported")
+		return
 	}
 
 	if (control1>>3)&0b1 == 1 {
@@ -100,6 +111,4 @@ func (cartridge *Cartridge) readHeader(header []uint8) error {
 	} else {
 		cartridge.HasTrainer = false
 	}
-
-	return nil
 }

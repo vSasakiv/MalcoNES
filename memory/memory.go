@@ -3,8 +3,8 @@ package memory
 import (
 	"fmt"
 	"os"
-	"vsasakiv/nesemulator/cartridge"
 	"vsasakiv/nesemulator/controller"
+	"vsasakiv/nesemulator/mappers"
 	"vsasakiv/nesemulator/ppu"
 )
 
@@ -23,7 +23,7 @@ const CONTROLLER1 = 0x4016
 
 type Memory struct {
 	ram             [0x0800]uint8
-	rom             cartridge.Cartridge
+	mapper          mappers.Mapper
 	OamDmaInterrupt bool
 	OamDmaPage      uint8
 }
@@ -36,8 +36,8 @@ var MainMemory Memory
 var modified Memory
 var debug bool = true
 
-func LoadFromCartridge(cartridge cartridge.Cartridge) {
-	MainMemory.rom = cartridge
+func LoadCartridge(mapper mappers.Mapper) {
+	MainMemory.mapper = mapper
 }
 
 func ConnectJoyPad1(joyPad *controller.JoyPad) {
@@ -65,7 +65,7 @@ func MemRead(addr uint16) uint8 {
 	case addr == CONTROLLER1:
 		return joyPad1.ReceiveRead()
 	case addr >= 0x8000:
-		return readPrgRom(addr)
+		return MainMemory.mapper.Read(addr)
 	}
 	return 0
 }
@@ -124,10 +124,9 @@ func MemWrite(addr uint16, val uint8) {
 		MainMemory.OamDmaPage = val
 	case addr == CONTROLLER1:
 		joyPad1.ReceiveWrite(val)
-	// prg rom
+	// cartridge
 	case addr >= 0x8000:
-		fmt.Println("Warning: cant write to ROM")
-		return
+		MainMemory.mapper.Write(addr, val)
 	}
 }
 
@@ -144,15 +143,6 @@ func MemWrite16(addr uint16, val uint16) {
 		fmt.Println("Warning: cant write to ROM")
 		return
 	}
-}
-
-func readPrgRom(addr uint16) uint8 {
-	addr -= 0x8000
-	// mirrors address if needed
-	if MainMemory.rom.PrgRomSize == 0x4000 && addr >= 0x4000 {
-		addr = addr % 0x4000
-	}
-	return MainMemory.rom.PrgRom[addr]
 }
 
 func PoolOamDmaInterrupt() bool {

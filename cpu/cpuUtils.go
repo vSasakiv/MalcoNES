@@ -7,6 +7,7 @@ import (
 	"os"
 	"slices"
 	"vsasakiv/nesemulator/cartridge"
+	"vsasakiv/nesemulator/mappers"
 	"vsasakiv/nesemulator/memory"
 )
 
@@ -575,7 +576,8 @@ func NesTestLineByLine() {
 	defer file.Close()
 
 	nestest := cartridge.ReadFromFile("./testFiles/nestest.nes")
-	memory.LoadFromCartridge(nestest)
+	mapper := mappers.NewMapper(&nestest)
+	memory.LoadCartridge(mapper)
 	cpu.Pc = 0xC000
 
 	scanner := bufio.NewScanner(file)

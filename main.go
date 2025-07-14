@@ -7,6 +7,7 @@ import (
 	"vsasakiv/nesemulator/cartridge"
 	"vsasakiv/nesemulator/controller"
 	"vsasakiv/nesemulator/cpu"
+	"vsasakiv/nesemulator/mappers"
 	"vsasakiv/nesemulator/memory"
 	"vsasakiv/nesemulator/ppu"
 
@@ -37,11 +38,13 @@ func main() {
 	ebiten.SetWindowTitle("My Emulator (debug)")
 
 	// setup and load cartridge
-	nestest := cartridge.ReadFromFile("./testFiles/supermario.nes")
+	nestest := cartridge.ReadFromFile("./testFiles/megaman.nes")
 
-	memory.LoadFromCartridge(nestest)
+	mapper := mappers.NewMapper(&nestest)
 
-	ppu.LoadFromCartridge(nestest)
+	memory.LoadCartridge(mapper)
+	ppu.LoadCartridge(mapper)
+
 	cpu.GetCpu().Reset()
 	JoyPad1 = controller.NewJoypad()
 	memory.ConnectJoyPad1(JoyPad1)

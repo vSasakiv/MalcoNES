@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"vsasakiv/nesemulator/cartridge"
+	"vsasakiv/nesemulator/mappers"
 )
 
 // PPU ADDRESSING SPACE
@@ -27,21 +28,21 @@ import (
 
 type Memory struct {
 	vram       [0x0800]uint8
-	cartridge  cartridge.Cartridge
+	mapper     mappers.Mapper
 	paletteRam [0x0100]uint8
 	oam        [0x0100]uint8
 }
 
 var PpuMemory Memory
 
-func LoadFromCartridge(cartridge cartridge.Cartridge) {
-	PpuMemory.cartridge = cartridge
+func LoadCartridge(mapper mappers.Mapper) {
+	PpuMemory.mapper = mapper
 }
 
 func PpuMemRead(addr uint16) uint8 {
 	addr = addr % 0x4000
 	if addr <= 0x1FFF {
-		return readChrRom(addr)
+		return PpuMemory.mapper.Read(addr)
 	} else if addr >= 0x2000 && addr <= 0x3EFF {
 		return PpuMemory.vram[mirrorVramAddress(addr)]
 	} else if addr >= 0x3F00 {
@@ -54,7 +55,7 @@ func PpuMemRead(addr uint16) uint8 {
 func PpuMemWrite(addr uint16, val uint8) {
 	addr = addr % 0x4000
 	if addr <= 0x1FFF {
-		fmt.Println("PpuMemWrite: Cannot write to rom addr:", addr)
+		PpuMemory.mapper.Write(addr, val)
 	} else if addr >= 0x2000 && addr <= 0x3EFF {
 		PpuMemory.vram[mirrorVramAddress(addr)] = val
 	} else if addr >= 0x3F00 {
@@ -84,17 +85,13 @@ func PpuOamRead(addr uint8) uint8 {
 	return PpuMemory.oam[addr]
 }
 
-func readChrRom(addr uint16) uint8 {
-	return PpuMemory.cartridge.ChrRom[addr]
-}
-
 func mirrorVramAddress(addr uint16) uint16 {
 	// mirrors the unused memory to the vram
 	if addr >= 0x3000 {
 		addr -= 0x1000
 	}
 	// performs mirroing according to cartridge info
-	switch PpuMemory.cartridge.MirroringType {
+	switch PpuMemory.mapper.Mirroring() {
 
 	case cartridge.HorizontalMirroring:
 		// HORIZONTAL Mirroring
@@ -130,7 +127,7 @@ func mirrorVramAddress(addr uint16) uint16 {
 }
 
 func GetNextNameTableAddress(baseNameTable uint16) uint16 {
-	switch PpuMemory.cartridge.MirroringType {
+	switch PpuMemory.mapper.Mirroring() {
 	case cartridge.HorizontalMirroring:
 		if baseNameTable == 0x2000 {
 			return 0x2800
