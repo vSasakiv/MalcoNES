@@ -28,10 +28,12 @@ func (mapper *Mapper2) Read(address uint16) uint8 {
 	// chr rom unchanged in this mapper
 	case address <= 0x1FFF:
 		// is chr ram
-		if mapper.cartridge.ChrRomSize == 0 {
+		if mapper.cartridge.ChrRamSize > 0 {
 			return mapper.cartridge.ChrRam[address]
 		}
 		return mapper.cartridge.ChrRom[address]
+	case address >= 0x6000 && address <= 0x7FFF:
+		return mapper.cartridge.SRam[address-0x6000]
 	// prg rom switched bank
 	case address >= 0x8000 && address <= 0xBFFF:
 		return mapper.cartridge.PrgRom[(0x4000*mapper.bankSelect)+int(address-0x8000)]
@@ -49,11 +51,13 @@ func (mapper *Mapper2) Write(address uint16, val uint8) {
 	// chr rom unchanged in this mapper
 	case address <= 0x1FFF:
 		// is chr ram
-		if mapper.cartridge.ChrRomSize == 0 {
+		if mapper.cartridge.ChrRamSize > 0 {
 			mapper.cartridge.ChrRam[address] = val
 			return
 		}
 		fmt.Printf("Warning: cannot write to ROM address %04x with mapper2\n", address)
+	case address >= 0x6000 && address <= 0x7FFF:
+		mapper.cartridge.SRam[address-0x6000] = val
 	// write to bank select register
 	case address >= 0x8000:
 		mapper.bankSelect = int(val) % mapper.totalBanks

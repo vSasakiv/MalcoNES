@@ -15,11 +15,14 @@ type Cartridge struct {
 	ChrRam        []uint8
 	ChrRamSize    uint
 	Trainer       []uint8
+	SRam          []uint8
 	HasTrainer    bool
 	MapperType    uint8
 	MirroringType string
 }
 
+const MirroringSingle0 = "S0"
+const MirroringSingle1 = "S1"
 const VerticalMirroring = "V"
 const HorizontalMirroring = "H"
 const FourScreenMirroring = "4"
@@ -95,6 +98,11 @@ func (cartridge *Cartridge) readHeader(header []uint8) {
 	if control2&0b1 == 1 || (control2>>1)&0b1 == 1 || (control2>>2)&0b11 == 0b10 {
 		fmt.Println("File is not and iNES 1.0 file! iNES 2.0 is not supported")
 		return
+	}
+
+	// has SRAM
+	if (control1>>1)&0b1 == 1 {
+		cartridge.SRam = make([]uint8, 0x2000)
 	}
 
 	if (control1>>3)&0b1 == 1 {

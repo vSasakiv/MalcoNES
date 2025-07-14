@@ -14,6 +14,8 @@ func NewMapper(cartridge *cartridge.Cartridge) Mapper {
 	switch cartridge.MapperType {
 	case 0:
 		return NewMapper2(cartridge)
+	case 1:
+		return NewMapper1(cartridge)
 	case 2:
 		return NewMapper2(cartridge)
 	}

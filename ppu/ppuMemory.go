@@ -101,6 +101,18 @@ func mirrorVramAddress(addr uint16) uint16 {
 	// performs mirroing according to cartridge info
 	switch PpuMemory.mapper.Mirroring() {
 
+	case cartridge.MirroringSingle0:
+		// Single 0 Mirroring
+		//     [ A ] [ A ]
+		//     [ A ] [ A ]
+		addr = 0x2000 + addr%0x0400
+
+	case cartridge.MirroringSingle1:
+		// Single 1 Mirroring
+		//     [ B ] [ B ]
+		//     [ B ] [ B ]
+		addr = 0x2400 + addr%0x0400
+
 	case cartridge.HorizontalMirroring:
 		// HORIZONTAL Mirroring
 		//     [ A ] [ A ]
@@ -132,33 +144,6 @@ func mirrorVramAddress(addr uint16) uint16 {
 		addr -= 0x2000
 	}
 	return addr
-}
-
-func GetNextNameTableAddress(baseNameTable uint16) uint16 {
-	switch PpuMemory.mapper.Mirroring() {
-	case cartridge.HorizontalMirroring:
-		if baseNameTable == 0x2000 {
-			return 0x2800
-		} else if baseNameTable == 0x2800 {
-			return 0x2400
-		} else if baseNameTable == 0x2400 {
-			return 0x2C00
-		} else {
-			return 0x2000
-		}
-	case cartridge.VerticalMirroring:
-		if baseNameTable == 0x2000 {
-			return 0x2400
-		} else if baseNameTable == 0x2400 {
-			return 0x2800
-		} else if baseNameTable == 0x2800 {
-			return 0x2C00
-		} else {
-			return 0x2000
-		}
-	}
-	fmt.Println("Could not get next name table address. base name table address:", baseNameTable)
-	return 0x2000
 }
 
 func HexDumpVram(filename string) {

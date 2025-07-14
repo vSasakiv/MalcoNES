@@ -64,7 +64,7 @@ func MemRead(addr uint16) uint8 {
 		return 0x40
 	case addr == CONTROLLER1:
 		return joyPad1.ReceiveRead()
-	case addr >= 0x8000:
+	case addr >= 0x6000:
 		return MainMemory.mapper.Read(addr)
 	}
 	return 0
@@ -83,7 +83,7 @@ func MemRead16(addr uint16) uint16 {
 			high = uint16(MemRead(addr+1)) << 8
 		}
 		return high + low
-	case addr >= 0x8000:
+	case addr >= 0x6000:
 		low := uint16(MemRead(addr))
 		high := uint16(MemRead(addr+1)) << 8
 		return high + low
@@ -125,7 +125,7 @@ func MemWrite(addr uint16, val uint8) {
 	case addr == CONTROLLER1:
 		joyPad1.ReceiveWrite(val)
 	// cartridge
-	case addr >= 0x8000:
+	case addr >= 0x6000:
 		MainMemory.mapper.Write(addr, val)
 	}
 }
@@ -139,7 +139,7 @@ func MemWrite16(addr uint16, val uint16) {
 		}
 		MemWrite(addr, uint8(val&0xff))
 		MemWrite(addr+1, uint8((val>>8)&0xff))
-	case addr >= 0x8000:
+	case addr >= 0x6000:
 		fmt.Println("Warning: cant write to ROM")
 		return
 	}
