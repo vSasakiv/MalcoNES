@@ -490,13 +490,27 @@ func (ppu *Ppu) evaluateSprites() {
 		tileIdx := PpuOamRead(idx + 1)
 		attrb := PpuOamRead(idx + 2)
 
+		// support for 8x16 sprites
+		var spriteHeight int
+		if ppu.getControlSetting(SPRITE_SIZE) == 1 {
+			spriteHeight = 16
+		} else {
+			spriteHeight = 8
+		}
+
 		diff := int(ppu.scanlines) - int(pixY)
 		// sprite is not in this scanline
-		if diff < 0 || diff >= 8 {
+		if diff < 0 || diff >= spriteHeight {
 			continue
 		}
 
-		tile := PpuMemReadTile(tileAddress + 0x10*uint16(tileIdx))
+		var tile []uint8
+		if spriteHeight == 8 {
+			tile = PpuMemReadTile(tileAddress + 0x10*uint16(tileIdx))
+		} else {
+			tile = PpuMemReadBigTile(uint16(tileIdx&0x01)*0x1000 + 0x20*uint16(tileIdx>>1))
+		}
+
 		flipHorizontal := (attrb>>6)&0b1 == 1
 		flipVertical := (attrb>>7)&0b1 == 1
 		tile = flipTile(tile, flipHorizontal, flipVertical)
@@ -521,22 +535,52 @@ func (ppu *Ppu) evaluateSprites() {
 	ppu.spriteCount = count
 }
 
-func flipTile(tile [16]uint8, flipHorizontal bool, flipVertical bool) [16]uint8 {
+func flipTile(tile []uint8, flipHorizontal bool, flipVertical bool) []uint8 {
 	if flipHorizontal {
 		for i, v := range tile {
 			tile[i] = bits.Reverse8(v)
 		}
 	}
-	if flipVertical {
+
+	if flipVertical && len(tile) == 16 {
 		for i := range uint8(4) {
 			aux := tile[i]
 			tile[i] = tile[7-i]
 			tile[7-i] = aux
 			aux = tile[i+8]
 			tile[i+8] = tile[15-i]
-			tile[15-i] = tile[i+8]
+			tile[15-i] = aux
+		}
+	} else if flipVertical && len(tile) == 32 {
+		// flip both tiles independently, than flip the whole thing
+		for i := range uint8(4) {
+			aux := tile[i]
+			tile[i] = tile[7-i]
+			tile[7-i] = aux
+
+			aux = tile[i+8]
+			tile[i+8] = tile[15-i]
+			tile[15-i] = tile[i+15]
+
+			aux = tile[i+16]
+			tile[i] = tile[23-i]
+			tile[23-i] = aux
+
+			aux = tile[i+24]
+			tile[i+24] = tile[31-i]
+			tile[31-i] = aux
+		}
+		for i := range uint8(8) {
+			aux := tile[i]
+			tile[i] = tile[i+16]
+			tile[i+16] = aux
+
+			aux = tile[i+8]
+			tile[i+8] = tile[i+24]
+			tile[i+24] = aux
 		}
 	}
+
 	return tile
 }
 
@@ -544,9 +588,15 @@ func getSpriteLine(tile []uint8, diff int) [8]uint8 {
 	var spriteLine [8]uint8
 
 	for i := range 8 {
-		lsb := tile[diff] >> (8 - i - 1) & 0b1
-		msb := tile[diff+8] >> (8 - i - 1) & 0b1
-		spriteLine[i] = lsb | (msb << 1)
+		if diff < 8 {
+			lsb := tile[diff] >> (8 - i - 1) & 0b1
+			msb := tile[diff+8] >> (8 - i - 1) & 0b1
+			spriteLine[i] = lsb | (msb << 1)
+		} else {
+			lsb := tile[diff+8] >> (8 - i - 1) & 0b1
+			msb := tile[diff+16] >> (8 - i - 1) & 0b1
+			spriteLine[i] = lsb | (msb << 1)
+		}
 	}
 	return spriteLine
 }
