@@ -27,7 +27,7 @@ import (
 
 type Memory struct {
 	vram       [0x0800]uint8
-	rom        cartridge.Cartridge
+	cartridge  cartridge.Cartridge
 	paletteRam [0x0100]uint8
 	oam        [0x0100]uint8
 }
@@ -35,7 +35,7 @@ type Memory struct {
 var PpuMemory Memory
 
 func LoadFromCartridge(cartridge cartridge.Cartridge) {
-	PpuMemory.rom = cartridge
+	PpuMemory.cartridge = cartridge
 }
 
 func PpuMemRead(addr uint16) uint8 {
@@ -85,7 +85,7 @@ func PpuOamRead(addr uint8) uint8 {
 }
 
 func readChrRom(addr uint16) uint8 {
-	return PpuMemory.rom.ChrRom[addr]
+	return PpuMemory.cartridge.ChrRom[addr]
 }
 
 func mirrorVramAddress(addr uint16) uint16 {
@@ -94,7 +94,7 @@ func mirrorVramAddress(addr uint16) uint16 {
 		addr -= 0x1000
 	}
 	// performs mirroing according to cartridge info
-	switch PpuMemory.rom.MirroringType {
+	switch PpuMemory.cartridge.MirroringType {
 
 	case cartridge.HorizontalMirroring:
 		// HORIZONTAL Mirroring
@@ -130,7 +130,7 @@ func mirrorVramAddress(addr uint16) uint16 {
 }
 
 func GetNextNameTableAddress(baseNameTable uint16) uint16 {
-	switch PpuMemory.rom.MirroringType {
+	switch PpuMemory.cartridge.MirroringType {
 	case cartridge.HorizontalMirroring:
 		if baseNameTable == 0x2000 {
 			return 0x2800

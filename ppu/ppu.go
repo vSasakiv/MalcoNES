@@ -2,6 +2,7 @@ package ppu
 
 import (
 	"fmt"
+	"math/bits"
 )
 
 // ppu control settings
@@ -27,17 +28,10 @@ const DEFAULT_BG_PALETTE_ADDRESS = 0x3F00
 const DEFAULT_OAM_PALETTE_ADDRESS = 0x3F10
 
 type Ppu struct {
-	// internal registers
-	currentAddress uint16
-	tempAddress    uint16
-	fineXScroll    uint8
-	writeToggle    bool
 	// register mapped to cpu memory
 	ppuCtrl    uint8
 	ppuMask    uint8
 	ppuStatus  uint8
-	ppuScrollX uint8
-	ppuScrollY uint8
 	ppuOamAddr uint8
 	ppuOamData uint8
 	// internal buffers
@@ -50,16 +44,14 @@ type Ppu struct {
 	// color palette
 	systemPalette [64][3]uint8
 	// frame control
-	vramAddress        uint16
-	CurrentFrame       Frame
-	CurrentPixelBuffer [XSIZE * YSIZE * 3]uint8
-	spriteLine         [8][8]uint8
-	spritePosition     [8]uint8
-	spritePalette      [8][4][3]uint8
-	spriteNumber       [8]uint8
-	spritePriority     [8]uint8
-	spriteCount        uint
-
+	CurrentFrame Frame
+	// sprites
+	spriteLine     [8][8]uint8
+	spritePosition [8]uint8
+	spritePalette  [8][4][3]uint8
+	spriteNumber   [8]uint8
+	spritePriority [8]uint8
+	spriteCount    uint
 	// ppu internal registers
 	loopyV uint16
 	loopyT uint16
@@ -90,10 +82,6 @@ func GetPpu() *Ppu {
 }
 
 var ppu Ppu = *NewPpu()
-
-func GetPixelBuffer() [XSIZE * YSIZE * 3]uint8 {
-	return ppu.CurrentPixelBuffer
-}
 
 func ExecuteLoopy(cycles uint) {
 
@@ -264,11 +252,6 @@ func (ppu *Ppu) setVblankStatus(val uint8) {
 }
 
 func (ppu *Ppu) setSpriteZeroHit() {
-	// if ppu.hasSpriteZeroCollision {
-	// 	if ppu.cycles == ppu.collisionCycle && ppu.collisionScanline == ppu.scanlines {
-	// 		ppu.ppuStatus |= 1 << 6
-	// 	}
-	// }
 	ppu.ppuStatus |= 1 << 6
 }
 
@@ -305,7 +288,6 @@ func (ppu *Ppu) WriteToPpuScroll(val uint8) {
 		ppu.loopyT = SetBitToVal(ppu.loopyT, 4, (val>>7)&0b1)
 		ppu.fineX = val & 0b111
 
-		ppu.ppuScrollX = val
 		ppu.write = 1
 	} else {
 		ppu.loopyT = SetBitToVal(ppu.loopyT, 5, (val>>3)&0b1)
@@ -318,10 +300,8 @@ func (ppu *Ppu) WriteToPpuScroll(val uint8) {
 		ppu.loopyT = SetBitToVal(ppu.loopyT, 13, (val>>1)&0b1)
 		ppu.loopyT = SetBitToVal(ppu.loopyT, 14, (val>>2)&0b1)
 
-		ppu.ppuScrollY = val
 		ppu.write = 0
 	}
-	ppu.writeToggle = !ppu.writeToggle
 }
 
 // ----- PPUADDR 0x2006 REGISTER -----
@@ -354,7 +334,6 @@ func (ppu *Ppu) WriteToAddrRegister(val uint8) {
 		ppu.loopyV = ppu.loopyT
 		ppu.write = 0
 	}
-	ppu.writeToggle = !ppu.writeToggle
 }
 
 func (ppu *Ppu) incrementAddrRegister() {
@@ -540,6 +519,25 @@ func (ppu *Ppu) evaluateSprites() {
 		count = 8
 	}
 	ppu.spriteCount = count
+}
+
+func flipTile(tile [16]uint8, flipHorizontal bool, flipVertical bool) [16]uint8 {
+	if flipHorizontal {
+		for i, v := range tile {
+			tile[i] = bits.Reverse8(v)
+		}
+	}
+	if flipVertical {
+		for i := range uint8(4) {
+			aux := tile[i]
+			tile[i] = tile[7-i]
+			tile[7-i] = aux
+			aux = tile[i+8]
+			tile[i+8] = tile[15-i]
+			tile[15-i] = tile[i+8]
+		}
+	}
+	return tile
 }
 
 func getSpriteLine(tile []uint8, diff int) [8]uint8 {
