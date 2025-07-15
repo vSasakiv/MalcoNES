@@ -54,6 +54,10 @@ func ExecuteNext() {
 		cpu.OamDmaWrite(memory.MainMemory.OamDmaPage)
 		return
 	}
+	if memory.MainMemory.Mapper.PollInterrupt() && cpu.getFlag(InterruptDisable) == 0 {
+		cpu.treatIrqInterrupt()
+		return
+	}
 
 	instruction := memory.MemRead(cpu.Pc)
 	opcode := cpu.opcodeTable[instruction]
@@ -595,4 +599,12 @@ func (cpu *Cpu) OamDmaWrite(page uint8) {
 		memory.MemWrite(memory.OAMDATA, val)
 	}
 	cpu.LastInstructionCycles = 514
+}
+
+func (cpu *Cpu) treatIrqInterrupt() {
+	cpu.pushToStack16(cpu.Pc)
+	cpu.pushToStack(cpu.Psts | 0b00010000)
+	cpu.setFlag(InterruptDisable, 1)
+	cpu.Pc = memory.MemRead16(0xFFFE)
+	cpu.LastInstructionCycles = 7
 }

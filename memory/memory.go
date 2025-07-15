@@ -23,7 +23,7 @@ const CONTROLLER1 = 0x4016
 
 type Memory struct {
 	ram             [0x0800]uint8
-	mapper          mappers.Mapper
+	Mapper          mappers.Mapper
 	OamDmaInterrupt bool
 	OamDmaPage      uint8
 }
@@ -37,7 +37,7 @@ var modified Memory
 var debug bool = true
 
 func LoadCartridge(mapper mappers.Mapper) {
-	MainMemory.mapper = mapper
+	MainMemory.Mapper = mapper
 }
 
 func ConnectJoyPad1(joyPad *controller.JoyPad) {
@@ -65,7 +65,7 @@ func MemRead(addr uint16) uint8 {
 	case addr == CONTROLLER1:
 		return joyPad1.ReceiveRead()
 	case addr >= 0x6000:
-		return MainMemory.mapper.Read(addr)
+		return MainMemory.Mapper.Read(addr)
 	}
 	return 0
 }
@@ -126,7 +126,7 @@ func MemWrite(addr uint16, val uint8) {
 		joyPad1.ReceiveWrite(val)
 	// cartridge
 	case addr >= 0x6000:
-		MainMemory.mapper.Write(addr, val)
+		MainMemory.Mapper.Write(addr, val)
 	}
 }
 

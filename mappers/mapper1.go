@@ -184,6 +184,9 @@ func (mapper *Mapper1) Mirroring() string {
 	}
 }
 
+func (mapper *Mapper1) Step(status Status)  {}
+func (mapper *Mapper1) PollInterrupt() bool { return false }
+
 func (mapper *Mapper1) writeToLoadRegister(address uint16, val uint8) {
 	// has msb as 1
 	if val&0x80 == 0x80 {

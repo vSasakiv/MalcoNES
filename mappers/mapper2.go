@@ -69,3 +69,6 @@ func (mapper *Mapper2) Write(address uint16, val uint8) {
 func (mapper *Mapper2) Mirroring() string {
 	return mapper.cartridge.MirroringType
 }
+
+func (mapper *Mapper2) Step(status Status)  {}
+func (mapper *Mapper2) PollInterrupt() bool { return false }

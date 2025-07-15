@@ -28,6 +28,7 @@ type Game struct {
 }
 
 var JoyPad1 *controller.JoyPad
+var Mapper mappers.Mapper
 
 func main() {
 	f, _ := os.Create("cpu.prof")
@@ -38,12 +39,12 @@ func main() {
 	ebiten.SetWindowTitle("My Emulator (debug)")
 
 	// setup and load cartridge
-	nestest := cartridge.ReadFromFile("./testFiles/thelegendofzelda.nes")
+	nestest := cartridge.ReadFromFile("./testFiles/megaman3.nes")
 
-	mapper := mappers.NewMapper(&nestest)
+	Mapper = mappers.NewMapper(&nestest)
 
-	memory.LoadCartridge(mapper)
-	ppu.LoadCartridge(mapper)
+	memory.LoadCartridge(Mapper)
+	ppu.LoadCartridge(Mapper)
 
 	cpu.GetCpu().Reset()
 	JoyPad1 = controller.NewJoypad()
@@ -118,6 +119,9 @@ func ifPressed(key ebiten.Key) uint {
 
 func tick() {
 	cpu.ExecuteNext()
-	ppu.ExecuteLoopy(cpu.GetCpu().LastInstructionCycles * 3)
+	for range cpu.GetCpu().LastInstructionCycles * 3 {
+		ppu.ExecuteLoopy(1)
+		Mapper.Step(ppu.GetPpuStatus())
+	}
 	// fmt.Println(cpu.GetCpu().TraceStatus())
 }

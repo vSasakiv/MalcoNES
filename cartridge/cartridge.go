@@ -100,11 +100,6 @@ func (cartridge *Cartridge) readHeader(header []uint8) {
 		return
 	}
 
-	// has SRAM
-	if (control1>>1)&0b1 == 1 {
-		cartridge.SRam = make([]uint8, 0x2000)
-	}
-
 	if (control1>>3)&0b1 == 1 {
 		cartridge.MirroringType = FourScreenMirroring
 	} else if control1&0b1 == 1 {
@@ -113,6 +108,11 @@ func (cartridge *Cartridge) readHeader(header []uint8) {
 		cartridge.MirroringType = HorizontalMirroring
 	}
 	cartridge.MapperType = (control1 >> 4) | (control2 & 0b1111_0000)
+
+	// has SRAM
+	if (control1>>1)&0b1 == 1 || cartridge.MapperType == 4 {
+		cartridge.SRam = make([]uint8, 0x2000)
+	}
 
 	if (control1>>2)&0b1 == 1 {
 		cartridge.HasTrainer = true

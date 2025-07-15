@@ -3,6 +3,7 @@ package ppu
 import (
 	"fmt"
 	"math/bits"
+	"vsasakiv/nesemulator/mappers"
 )
 
 // ppu control settings
@@ -702,6 +703,17 @@ func ShiftValBufferLeft(slice []uint8) []uint8 {
 	copy(slice, slice[1:])
 	slice[len(slice)-1] = 0
 	return slice
+}
+
+// ----- Mapper info -----
+
+func GetPpuStatus() mappers.Status {
+	status := mappers.Status{}
+	status.PpuScanlines = ppu.scanlines
+	status.PpuCycles = ppu.cycles
+	status.PpuBackgroundEnabled = ppu.getMaskSetting(ENABLE_BACKGROUND) == 1
+	status.PpuSpriteEnabled = ppu.getMaskSetting(ENABLE_SPRITE) == 1
+	return status
 }
 
 // ----- DEBUG -----
