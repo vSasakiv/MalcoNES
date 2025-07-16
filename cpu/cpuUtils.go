@@ -235,13 +235,13 @@ func (cpu *Cpu) TraceStatus() string {
 
 // given an instruction, calculates the ammount of cycles it takes
 // it considers the extra cycles for page crossing instructions
-func (cpu *Cpu) calcCycles(opcode uint8, mnemonic string, addressingMode uint8) uint {
+func (cpu *Cpu) calcCycles(instruction uint8, mnemonic string, addressingMode uint8) uint {
 	switch mnemonic {
 	case ADC, AND, CMP, EOR, LDA, ORA, SBC, BIT, STA, STX, STY,
 		LDX, LDY, CPX, CPY, LAX, SAX, DCP, ISB, SLO, RLA, SRE, RRA:
 		var cycles uint
 
-		if opcode == 0xA0 || opcode == 0xC0 || opcode == 0xE0 || opcode == 0xA2 {
+		if instruction == 0xA0 || instruction == 0xC0 || instruction == 0xE0 || instruction == 0xA2 {
 			return 2
 		}
 
@@ -258,7 +258,7 @@ func (cpu *Cpu) calcCycles(opcode uint8, mnemonic string, addressingMode uint8) 
 		return cycles
 	case ASL, DEC, INC, LSR, ROL, ROR:
 		// accumulator mode
-		if opcode == 0x0A || opcode == 0x2A || opcode == 0x4A || opcode == 0x6A {
+		if instruction == 0x0A || instruction == 0x2A || instruction == 0x4A || instruction == 0x6A {
 			return 2
 		}
 		cycles := 4 + cyclesPerAddressingMode(addressingMode)
@@ -267,7 +267,7 @@ func (cpu *Cpu) calcCycles(opcode uint8, mnemonic string, addressingMode uint8) 
 		}
 		return cycles
 	case JMP:
-		if opcode == 0x4C {
+		if instruction == 0x4C {
 			return 3
 		} else {
 			return 5
@@ -299,7 +299,7 @@ func (cpu *Cpu) calcCycles(opcode uint8, mnemonic string, addressingMode uint8) 
 	case JSR, RTI, RTS:
 		return 6
 	case NOP:
-		switch opcode {
+		switch instruction {
 		// implict nops size 1
 		case 0xEA, 0x1A, 0x3A, 0x5A, 0x7A, 0xDA, 0xFA:
 			return 2
@@ -408,7 +408,7 @@ func (cpu *Cpu) RunAndTraceToFile(path string) {
 		}
 		trace = cpu.TraceStatus() + "\n"
 		file.WriteString(trace)
-		ExecuteNext()
+		// ExecuteNext()
 	}
 }
 
@@ -591,7 +591,7 @@ func NesTestLineByLine() {
 			fmt.Printf("%s", errorLog)
 			return
 		}
-		ExecuteNext()
+		// ExecuteNext()
 	}
 }
 

@@ -78,83 +78,91 @@ func NewPpu() *Ppu {
 	return &ppu
 }
 
+func (ppu *Ppu) Reset() {
+	ppu.ppuCtrl = 0
+	ppu.ppuMask = 0
+	ppu.write = 0
+	ppu.readBuffer = 0
+	ppu.loopyV = 0
+	ppu.loopyT = 0
+	ppu.fineX = 0
+}
+
 func GetPpu() *Ppu {
 	return &ppu
 }
 
 var ppu Ppu = *NewPpu()
 
-func ExecuteLoopy(cycles uint) {
+func Clock() {
 
-	for range cycles {
-		ppu.runCycle()
+	ppu.runCycle()
 
-		visibleScanlines := ppu.scanlines <= 239
-		visibleCycles := ppu.cycles >= 1 && ppu.cycles <= 256
-		preRenderScanline := ppu.scanlines == 261
-		preRenderCopyY := ppu.cycles >= 280 && ppu.cycles <= 304
-		vblank := ppu.scanlines == 241 && ppu.cycles == 1
-		vblankEnd := preRenderScanline && ppu.cycles == 1
-		spriteEvaluate := visibleScanlines && ppu.cycles == 257
+	visibleScanlines := ppu.scanlines <= 239
+	visibleCycles := ppu.cycles >= 1 && ppu.cycles <= 256
+	preRenderScanline := ppu.scanlines == 261
+	preRenderCopyY := ppu.cycles >= 280 && ppu.cycles <= 304
+	vblank := ppu.scanlines == 241 && ppu.cycles == 1
+	vblankEnd := preRenderScanline && ppu.cycles == 1
+	spriteEvaluate := visibleScanlines && ppu.cycles == 257
 
-		// rendering visible scanlines
-		if ppu.getMaskSetting(ENABLE_BACKGROUND) == 1 {
-			if visibleScanlines {
-				if visibleCycles {
-					// draw pixel from output buffer
-					ppu.renderPixel()
-					// if cycle is 8, 16, 24 ... reload shift register and update loopyV
-					if ppu.cycles%8 == 0 {
-						ppu.reloadBackgroundBuffer()
-						ppu.incrementLoopyVX()
-					}
-				}
-				// increment y -> go down a pixel
-				if ppu.cycles == 256 {
-					ppu.incrementLoopyVY()
-				}
-				// get scrollx back to start
-				if ppu.cycles == 257 {
-					ppu.copyScrollxToLoopyV()
-				}
-				// load first tile
-				if ppu.cycles == 327 {
-					ppu.reloadBackgroundBuffer()
-					ppu.incrementLoopyVX()
-				}
-				// load second tile
-				if ppu.cycles == 335 {
-					for range 8 {
-						// shift background buffers
-						ppu.outputBackgroundVal = ShiftValBufferLeft(ppu.outputBackgroundVal)
-						ppu.outputBackgroundRgb = ShiftRgbBufferLeft(ppu.outputBackgroundRgb)
-					}
+	// rendering visible scanlines
+	if ppu.getMaskSetting(ENABLE_BACKGROUND) == 1 {
+		if visibleScanlines {
+			if visibleCycles {
+				// draw pixel from output buffer
+				ppu.renderPixel()
+				// if cycle is 8, 16, 24 ... reload shift register and update loopyV
+				if ppu.cycles%8 == 0 {
 					ppu.reloadBackgroundBuffer()
 					ppu.incrementLoopyVX()
 				}
 			}
-			if preRenderScanline && preRenderCopyY {
-				ppu.copyScrollyToLoopyV()
+			// increment y -> go down a pixel
+			if ppu.cycles == 256 {
+				ppu.incrementLoopyVY()
+			}
+			// get scrollx back to start
+			if ppu.cycles == 257 {
+				ppu.copyScrollxToLoopyV()
+			}
+			// load first tile
+			if ppu.cycles == 327 {
+				ppu.reloadBackgroundBuffer()
+				ppu.incrementLoopyVX()
+			}
+			// load second tile
+			if ppu.cycles == 335 {
+				for range 8 {
+					// shift background buffers
+					ppu.outputBackgroundVal = ShiftValBufferLeft(ppu.outputBackgroundVal)
+					ppu.outputBackgroundRgb = ShiftRgbBufferLeft(ppu.outputBackgroundRgb)
+				}
+				ppu.reloadBackgroundBuffer()
+				ppu.incrementLoopyVX()
 			}
 		}
+		if preRenderScanline && preRenderCopyY {
+			ppu.copyScrollyToLoopyV()
+		}
+	}
 
-		if ppu.getMaskSetting(ENABLE_SPRITE) == 1 {
-			if spriteEvaluate {
-				ppu.evaluateSprites()
-			}
+	if ppu.getMaskSetting(ENABLE_SPRITE) == 1 {
+		if spriteEvaluate {
+			ppu.evaluateSprites()
 		}
+	}
 
-		if vblank {
-			if ppu.getControlSetting(VBLANK_NMI_ENABLE) == 1 {
-				ppu.NmiInterrupt = true
-			}
-			ppu.setVblankStatus(1)
+	if vblank {
+		if ppu.getControlSetting(VBLANK_NMI_ENABLE) == 1 {
+			ppu.NmiInterrupt = true
 		}
-		if vblankEnd {
-			ppu.NmiInterrupt = false
-			ppu.clearSpriteZeroHit()
-			ppu.setVblankStatus(0)
-		}
+		ppu.setVblankStatus(1)
+	}
+	if vblankEnd {
+		ppu.NmiInterrupt = false
+		ppu.clearSpriteZeroHit()
+		ppu.setVblankStatus(0)
 	}
 }
 

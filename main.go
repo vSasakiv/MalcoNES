@@ -19,7 +19,7 @@ var running bool
 const (
 	screenWidth  = 256
 	screenHeight = 240
-	scale        = 3
+	scale        = 1
 )
 
 type Game struct {
@@ -39,7 +39,7 @@ func main() {
 	ebiten.SetWindowTitle("My Emulator (debug)")
 
 	// setup and load cartridge
-	nestest := cartridge.ReadFromFile("./testFiles/megaman3.nes")
+	nestest := cartridge.ReadFromFile("./testFiles/supermario3.nes")
 
 	Mapper = mappers.NewMapper(&nestest)
 
@@ -66,9 +66,9 @@ func (g *Game) Update() error {
 
 	// Emulation step
 	cycles := 0
-	for cycles < 29780 {
+	for cycles < 89341 {
 		tick()
-		cycles += int(cpu.GetCpu().LastInstructionCycles)
+		cycles++
 	}
 
 	// time.Sleep(time.Second)
@@ -118,10 +118,8 @@ func ifPressed(key ebiten.Key) uint {
 }
 
 func tick() {
-	cpu.ExecuteNext()
-	for range cpu.GetCpu().LastInstructionCycles * 3 {
-		ppu.ExecuteLoopy(1)
-		Mapper.Step(ppu.GetPpuStatus())
-	}
+	cpu.Clock()
+	ppu.Clock()
+	Mapper.Step(ppu.GetPpuStatus())
 	// fmt.Println(cpu.GetCpu().TraceStatus())
 }
