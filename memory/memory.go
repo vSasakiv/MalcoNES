@@ -3,6 +3,7 @@ package memory
 import (
 	"fmt"
 	"os"
+	"vsasakiv/nesemulator/apu"
 	"vsasakiv/nesemulator/controller"
 	"vsasakiv/nesemulator/mappers"
 	"vsasakiv/nesemulator/ppu"
@@ -18,6 +19,9 @@ const PPUSCROLL = 0x2005
 const PPUADDR = 0x2006
 const PPUDATA = 0x2007
 const OAMDMA = 0x4014
+const APU_PULSE1_DUTY = 0x4000
+const APU_PULSE1_TIMER_LOW = 0x4002
+const APU_PULSE1_TIMER_HIGH = 0x4003
 
 const CONTROLLER1 = 0x4016
 
@@ -118,6 +122,13 @@ func MemWrite(addr uint16, val uint8) {
 		case PPUDATA:
 			ppu.GetPpu().WriteToPpuDataRegister(val)
 		}
+		// APU registers
+	case addr == APU_PULSE1_DUTY:
+		apu.GetApu().Pulse1.WriteToDutyCycleAndVolume(val)
+	case addr == APU_PULSE1_TIMER_LOW:
+		apu.GetApu().Pulse1.WriteToTimerLow(val)
+	case addr == APU_PULSE1_TIMER_HIGH:
+		apu.GetApu().Pulse1.WriteToTimerHigh(val)
 	// OAMDMA, using interrupt
 	case addr == OAMDMA:
 		MainMemory.OamDmaInterrupt = true

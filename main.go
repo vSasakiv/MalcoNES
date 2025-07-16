@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"runtime/pprof"
+	"time"
 	"vsasakiv/nesemulator/apu"
 	"vsasakiv/nesemulator/cartridge"
 	"vsasakiv/nesemulator/controller"
@@ -12,15 +13,23 @@ import (
 	"vsasakiv/nesemulator/memory"
 	"vsasakiv/nesemulator/ppu"
 
+	"github.com/gopxl/beep/v2"
+	"github.com/gopxl/beep/v2/speaker"
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
 var running bool
 
+const cpuClockFrequency float64 = 1789773.00              // 1.789773 Mhz
+const ppuClockFrequency float64 = cpuClockFrequency * 3.0 // ppu frequency is triple of cpu, used as base cycle
+const apuClockFrequency float64 = cpuClockFrequency / 2.0 // apu frequency is half of cpu
+const audioSampleRate float64 = 44100.00                  // standard 44.1Khz sample rate
+const cyclesPerSample float64 = ppuClockFrequency / audioSampleRate
+
 const (
 	screenWidth  = 256
 	screenHeight = 240
-	scale        = 1
+	scale        = 3
 )
 
 type Game struct {
@@ -35,6 +44,11 @@ func main() {
 	f, _ := os.Create("cpu.prof")
 	pprof.StartCPUProfile(f)
 	defer pprof.StopCPUProfile()
+
+	sr := beep.SampleRate(audioSampleRate)
+	speaker.Init(sr, sr.N(time.Second/10))
+	streamer := apu.GetApu()
+	speaker.Play(streamer)
 
 	ebiten.SetWindowSize(screenWidth*scale, screenHeight*scale)
 	ebiten.SetWindowTitle("My Emulator (debug)")
@@ -69,9 +83,15 @@ func (g *Game) Update() error {
 
 	// Emulation step
 	cycles := 0
+	audioRate := 0.0
 	for cycles < 89341 {
 		tick()
+		if audioRate >= cyclesPerSample {
+			audioRate -= cyclesPerSample
+			apu.GetSample()
+		}
 		cycles++
+		audioRate += 1
 	}
 
 	// time.Sleep(time.Second)
