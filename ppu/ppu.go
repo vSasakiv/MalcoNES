@@ -561,10 +561,10 @@ func flipTile(tile []uint8, flipHorizontal bool, flipVertical bool) []uint8 {
 
 			aux = tile[i+8]
 			tile[i+8] = tile[15-i]
-			tile[15-i] = tile[i+15]
+			tile[15-i] = aux
 
 			aux = tile[i+16]
-			tile[i] = tile[23-i]
+			tile[i+16] = tile[23-i]
 			tile[23-i] = aux
 
 			aux = tile[i+24]
