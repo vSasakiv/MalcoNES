@@ -45,10 +45,8 @@ func main() {
 	pprof.StartCPUProfile(f)
 	defer pprof.StopCPUProfile()
 
-	sr := beep.SampleRate(audioSampleRate)
+	sr := beep.SampleRate(44100)
 	speaker.Init(sr, sr.N(time.Second/10))
-	streamer := apu.GetApu()
-	speaker.Play(streamer)
 
 	ebiten.SetWindowSize(screenWidth*scale, screenHeight*scale)
 	ebiten.SetWindowTitle("My Emulator (debug)")
@@ -94,6 +92,7 @@ func (g *Game) Update() error {
 		audioRate += 1
 	}
 
+	speaker.Play(apu.GetApu())
 	// time.Sleep(time.Second)
 	// Update pixels
 	rgb := ppu.GetPpu().CurrentFrame.GetPixelData()

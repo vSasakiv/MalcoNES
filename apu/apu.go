@@ -61,13 +61,25 @@ func GetApu() *Apu {
 }
 
 func (apu *Apu) Stream(samples [][2]float64) (n int, ok bool) {
-	for i := range apu.sampleBuffer {
+	samplesLen := len(samples)
+	apuBufferLen := len(apu.sampleBuffer)
+	var bufferLen uint
+	var isEmpty bool
+
+	if samplesLen < apuBufferLen {
+		isEmpty = false
+		bufferLen = uint(samplesLen)
+	} else {
+		isEmpty = true
+		bufferLen = uint(apuBufferLen)
+	}
+
+	for i := range bufferLen {
 		samples[i][0] = apu.sampleBuffer[i]
 		samples[i][1] = apu.sampleBuffer[i]
 	}
-	nSamples := len(apu.sampleBuffer)
-	apu.sampleBuffer = apu.sampleBuffer[:0]
-	return nSamples, true
+	apu.sampleBuffer = apu.sampleBuffer[bufferLen:]
+	return int(bufferLen), isEmpty
 }
 
 func (apu *Apu) Err() error {
