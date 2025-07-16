@@ -250,7 +250,7 @@ func (mapper *Mapper4) Mirroring() string {
 	return mapper.cartridge.MirroringType
 }
 
-func (mapper *Mapper4) Step(status Status) {
+func (mapper *Mapper4) Clock(status Status) {
 	// tick counter only on cycle 260
 	if status.PpuCycles != 260 {
 		return

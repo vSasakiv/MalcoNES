@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"runtime/pprof"
+	"vsasakiv/nesemulator/apu"
 	"vsasakiv/nesemulator/cartridge"
 	"vsasakiv/nesemulator/controller"
 	"vsasakiv/nesemulator/cpu"
@@ -40,13 +41,15 @@ func main() {
 
 	// setup and load cartridge
 	nestest := cartridge.ReadFromFile("./testFiles/supermario3.nes")
-
 	Mapper = mappers.NewMapper(&nestest)
 
 	memory.LoadCartridge(Mapper)
 	ppu.LoadCartridge(Mapper)
 
 	cpu.GetCpu().Reset()
+	ppu.GetPpu().Reset()
+	apu.GetApu().Reset()
+
 	JoyPad1 = controller.NewJoypad()
 	memory.ConnectJoyPad1(JoyPad1)
 
@@ -117,9 +120,11 @@ func ifPressed(key ebiten.Key) uint {
 	return 0
 }
 
+// Clock all of the emulator components
 func tick() {
 	cpu.Clock()
+	apu.Clock()
 	ppu.Clock()
-	Mapper.Step(ppu.GetPpuStatus())
+	Mapper.Clock(ppu.GetPpuStatus())
 	// fmt.Println(cpu.GetCpu().TraceStatus())
 }

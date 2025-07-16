@@ -70,5 +70,5 @@ func (mapper *Mapper2) Mirroring() string {
 	return mapper.cartridge.MirroringType
 }
 
-func (mapper *Mapper2) Step(status Status)  {}
+func (mapper *Mapper2) Clock(status Status) {}
 func (mapper *Mapper2) PollInterrupt() bool { return false }

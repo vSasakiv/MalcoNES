@@ -7,7 +7,7 @@ import (
 type Mapper interface {
 	Read(address uint16) uint8
 	Write(address uint16, val uint8)
-	Step(status Status)
+	Clock(status Status)
 	PollInterrupt() bool
 	Mirroring() string
 }
