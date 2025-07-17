@@ -73,6 +73,7 @@ func ReadFromFile(path string) Cartridge {
 	cartridge.ChrRom = chrRom
 
 	cartridge.ChrRam = make([]byte, cartridge.ChrRamSize)
+	fmt.Println(len(cartridge.ChrRam))
 
 	return cartridge
 }
@@ -110,7 +111,7 @@ func (cartridge *Cartridge) readHeader(header []uint8) {
 	cartridge.MapperType = (control1 >> 4) | (control2 & 0b1111_0000)
 
 	// has SRAM
-	if (control1>>1)&0b1 == 1 || cartridge.MapperType == 4 {
+	if (control1>>1)&0b1 == 1 || cartridge.MapperType == 4 || cartridge.MapperType == 2 {
 		cartridge.SRam = make([]uint8, 0x2000)
 	}
 
