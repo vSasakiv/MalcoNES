@@ -4,16 +4,30 @@ package apu
 // makes it so that the timing will be more precise !
 const timePerClock float64 = 1.00 / 5369319.00
 
+// the max samples per frame is actually 89341 / cyclePerSample which is approximately
+// 734 samples, so we use 1024 for safety
+const samplesPerFrame uint = 1024
+
+var lengthLookUpTable = []byte{
+	10, 254, 20, 2, 40, 4, 80, 6, 160, 8, 60, 10, 14, 12, 26, 14,
+	12, 16, 24, 18, 48, 20, 96, 22, 192, 24, 72, 26, 16, 28, 32, 30,
+}
+
+var pulseLookUpTable []float64 = BuildPulseLookupTable()
+
 type Apu struct {
-	clockCounter uint
-	apuCycle     uint
-	realTime     float64
-	sampleBuffer []float64
-	Pulse1       Pulse
+	clockCounter  uint
+	apuCycle      uint
+	realTime      float64
+	currentSample []byte
+	Pulse1        Pulse
+	Pulse2        Pulse
 }
 
 func NewApu() *Apu {
 	var apu Apu
+	// 16 bit sample
+	apu.currentSample = make([]byte, 2)
 	return &apu
 }
 
@@ -31,20 +45,31 @@ func Clock() {
 	if apu.clockCounter == 6 {
 		apu.apuCycle++
 		apu.Pulse1.clockSequencer()
+		apu.Pulse2.clockSequencer()
 		apu.clockCounter = 0
 	}
 
 	if apu.apuCycle == 3728 {
 		apu.Pulse1.clockEnvelope()
+		apu.Pulse2.clockEnvelope()
 	}
+	// half frame
 	if apu.apuCycle == 7456 {
 		apu.Pulse1.clockEnvelope()
+		apu.Pulse1.clockLengthCounter()
+		apu.Pulse2.clockEnvelope()
+		apu.Pulse2.clockLengthCounter()
 	}
 	if apu.apuCycle == 11185 {
 		apu.Pulse1.clockEnvelope()
+		apu.Pulse2.clockEnvelope()
 	}
+	// half frame
 	if apu.apuCycle == 14914 {
 		apu.Pulse1.clockEnvelope()
+		apu.Pulse1.clockLengthCounter()
+		apu.Pulse2.clockEnvelope()
+		apu.Pulse2.clockLengthCounter()
 	}
 	if apu.apuCycle == 14915 {
 		apu.apuCycle = 0
@@ -52,45 +77,37 @@ func Clock() {
 
 }
 
-func GetSample() {
-	apu.sampleBuffer = append(apu.sampleBuffer, apu.Pulse1.getSample())
+func GenSample() int16 {
+	pulseSample := pulseLookUpTable[apu.Pulse1.getSample()+apu.Pulse2.getSample()]
+	sample := int16((pulseSample*2 - 1) * 32767)
+	return sample
 }
 
 func GetApu() *Apu {
 	return &apu
 }
 
-func (apu *Apu) Stream(samples [][2]float64) (n int, ok bool) {
-	samplesLen := len(samples)
-	apuBufferLen := len(apu.sampleBuffer)
-	var bufferLen uint
-	var isEmpty bool
-
-	if samplesLen < apuBufferLen {
-		isEmpty = false
-		bufferLen = uint(samplesLen)
+// Write to status 0x4015 register
+func (apu *Apu) WriteToStatusRegister(val uint8) {
+	if (val & 0b1) == 1 {
+		apu.Pulse1.channelEnable = true
 	} else {
-		isEmpty = true
-		bufferLen = uint(apuBufferLen)
+		apu.Pulse1.channelEnable = false
 	}
 
-	for i := range bufferLen {
-		samples[i][0] = apu.sampleBuffer[i]
-		samples[i][1] = apu.sampleBuffer[i]
+	if ((val >> 1) & 0b1) == 1 {
+		apu.Pulse2.channelEnable = true
+	} else {
+		apu.Pulse2.channelEnable = false
 	}
-	apu.sampleBuffer = apu.sampleBuffer[bufferLen:]
-	return int(bufferLen), isEmpty
-}
 
-func (apu *Apu) Err() error {
-	return nil
 }
 
 // standard start volume when reseting envelope
 const envelopeStartVolume = 15
 
 // lookup table for value of pulse given duty cycle and sequencerStep
-var pulseLookUpTable = [4][8]uint{
+var dutyCycleLookUpTable = [4][8]uint{
 	{0, 1, 0, 0, 0, 0, 0, 0},
 	{0, 1, 1, 0, 0, 0, 0, 0},
 	{0, 1, 1, 1, 1, 0, 0, 0},
@@ -98,6 +115,8 @@ var pulseLookUpTable = [4][8]uint{
 }
 
 type Pulse struct {
+	channelEnable bool
+
 	dutyCycle         uint
 	lengthCounterHalt bool
 	constantEnvelope  bool
@@ -117,7 +136,18 @@ type Pulse struct {
 	pulseTimer         uint
 	pulseTimerPeriod   uint
 
-	lengthCounterLoad uint
+	lengthCounter uint
+}
+
+// Build the mixer pulse value lookUp table for faster processing
+func BuildPulseLookupTable() []float64 {
+	// lookUpTable approximation for the mixer output
+	lookupTable := make([]float64, 31)
+	lookupTable[0] = 0
+	for i := range 30 {
+		lookupTable[i+1] = 95.52 / ((8128.0 / float64(i)) + 100.0)
+	}
+	return lookupTable
 }
 
 // Write to register 0x4000 / 0x4004 of pulse registers
@@ -149,7 +179,7 @@ func (pulse *Pulse) WriteToDutyCycleAndVolume(val uint8) {
 func (pulse *Pulse) WriteToTimerLow(val uint8) {
 	// val = LLLL.LLLL
 	// LLLL.LLLL -> lower 8 bits of sequencer timer
-	pulse.pulseTimerPeriod = uint(val) | pulse.pulseTimerPeriod&0xFF00
+	pulse.pulseTimerPeriod = uint(val) | (pulse.pulseTimerPeriod & 0xFF00)
 }
 
 // write to register 0x4003 / 0x4007 of pulse registers
@@ -158,8 +188,9 @@ func (pulse *Pulse) WriteToTimerHigh(val uint8) {
 	// llll.l -> length counter load
 	// HHH -> high 3 bits of sequencer timer
 	// also set the start envelope flag
-	pulse.pulseTimerPeriod = uint(val)<<8 | pulse.pulseTimerPeriod&0x00FF
-	pulse.lengthCounterLoad = uint(val >> 3)
+	pulse.pulseTimerPeriod = uint(val&7)<<8 | (pulse.pulseTimerPeriod & 0x00FF)
+	pulse.lengthCounter = uint(lengthLookUpTable[(val >> 3)])
+	pulse.sequencerStep = 0
 	pulse.startEnvelope = true
 }
 
@@ -206,6 +237,14 @@ func (pulse *Pulse) clockSequencer() {
 	}
 }
 
+// clock the length counter
+func (pulse *Pulse) clockLengthCounter() {
+	// disabling the channel via status also halts length counter
+	if !pulse.lengthCounterHalt && pulse.lengthCounter > 0 && pulse.channelEnable {
+		pulse.lengthCounter -= 1
+	}
+}
+
 // return the current envelope volume, if it is constant, return the value
 // loaded from register, if it is not constant, return the decay counter
 // of the envelope
@@ -217,6 +256,23 @@ func (pulse *Pulse) getEnvelopeVolume() uint {
 	}
 }
 
-func (pulse *Pulse) getSample() float64 {
-	return float64(pulseLookUpTable[pulse.dutyCycle][pulse.sequencerStep]) * float64(pulse.getEnvelopeVolume())
+func (pulse *Pulse) getSample() uint {
+	// channel disabled
+	if !pulse.channelEnable {
+		return 0
+	}
+	// length counter finished
+	if pulse.lengthCounter == 0 {
+		return 0
+	}
+
+	if pulse.pulseTimerPeriod < 8 || pulse.pulseTimerPeriod > 0x7FF {
+		return 0
+	}
+
+	if dutyCycleLookUpTable[pulse.dutyCycle][pulse.sequencerStep] == 1 && pulse.lengthCounter > 0 {
+		return pulse.getEnvelopeVolume()
+	} else {
+		return 0
+	}
 }

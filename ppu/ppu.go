@@ -45,7 +45,8 @@ type Ppu struct {
 	// color palette
 	systemPalette [64][3]uint8
 	// frame control
-	CurrentFrame Frame
+	bufferFrames [2]*Frame
+	frontBuffer  uint
 	// sprites
 	spriteLine     [8][8]uint8
 	spritePosition [8]uint8
@@ -71,6 +72,8 @@ func NewPpu() *Ppu {
 	ppu.outputPixelBuffer = make([][3]uint8, 16)
 	ppu.outputBackgroundRgb = make([][3]uint8, 16)
 	ppu.outputBackgroundVal = make([]uint8, 16)
+	ppu.bufferFrames[0] = NewFrame()
+	ppu.bufferFrames[1] = NewFrame()
 
 	ppu.cycles = 340
 	ppu.scanlines = 240
@@ -154,6 +157,8 @@ func Clock() {
 	}
 
 	if vblank {
+		// swap front buffer
+		ppu.frontBuffer = 1 - ppu.frontBuffer
 		if ppu.getControlSetting(VBLANK_NMI_ENABLE) == 1 {
 			ppu.NmiInterrupt = true
 		}
@@ -402,7 +407,7 @@ func (ppu *Ppu) renderPixel() {
 	}
 
 	// if no sprite is rendered, render background instead
-	ppu.CurrentFrame.setPixel(ppu.cycles-1, ppu.scanlines, rgb)
+	ppu.bufferFrames[1-ppu.frontBuffer].setPixel(ppu.cycles-1, ppu.scanlines, rgb)
 	// shift background buffers
 	ppu.outputBackgroundVal = ShiftValBufferLeft(ppu.outputBackgroundVal)
 	ppu.outputBackgroundRgb = ShiftRgbBufferLeft(ppu.outputBackgroundRgb)
@@ -711,6 +716,12 @@ func ShiftValBufferLeft(slice []uint8) []uint8 {
 	copy(slice, slice[1:])
 	slice[len(slice)-1] = 0
 	return slice
+}
+
+// ----- syncing double buffering -----
+
+func (ppu *Ppu) GetPixelData() []uint8 {
+	return ppu.bufferFrames[ppu.frontBuffer].GetPixelData()
 }
 
 // ----- Mapper info -----

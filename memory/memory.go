@@ -23,6 +23,12 @@ const APU_PULSE1_DUTY = 0x4000
 const APU_PULSE1_TIMER_LOW = 0x4002
 const APU_PULSE1_TIMER_HIGH = 0x4003
 
+const APU_PULSE2_DUTY = 0x4004
+const APU_PULSE2_TIMER_LOW = 0x4006
+const APU_PULSE2_TIMER_HIGH = 0x4007
+
+const APU_STATUS = 0x4015
+
 const CONTROLLER1 = 0x4016
 
 type Memory struct {
@@ -129,6 +135,14 @@ func MemWrite(addr uint16, val uint8) {
 		apu.GetApu().Pulse1.WriteToTimerLow(val)
 	case addr == APU_PULSE1_TIMER_HIGH:
 		apu.GetApu().Pulse1.WriteToTimerHigh(val)
+	case addr == APU_PULSE2_DUTY:
+		apu.GetApu().Pulse2.WriteToDutyCycleAndVolume(val)
+	case addr == APU_PULSE2_TIMER_LOW:
+		apu.GetApu().Pulse2.WriteToTimerLow(val)
+	case addr == APU_PULSE2_TIMER_HIGH:
+		apu.GetApu().Pulse2.WriteToTimerHigh(val)
+	case addr == APU_STATUS:
+		apu.GetApu().WriteToStatusRegister(val)
 	// OAMDMA, using interrupt
 	case addr == OAMDMA:
 		MainMemory.OamDmaInterrupt = true

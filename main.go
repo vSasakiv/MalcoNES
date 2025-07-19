@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/binary"
+	"fmt"
+	"io"
 	"log"
 	"os"
 	"runtime/pprof"
-	"time"
 	"vsasakiv/nesemulator/apu"
 	"vsasakiv/nesemulator/cartridge"
 	"vsasakiv/nesemulator/controller"
@@ -13,18 +15,19 @@ import (
 	"vsasakiv/nesemulator/memory"
 	"vsasakiv/nesemulator/ppu"
 
-	"github.com/gopxl/beep/v2"
-	"github.com/gopxl/beep/v2/speaker"
+	"github.com/ebitengine/oto/v3"
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
 var running bool
 
-const cpuClockFrequency float64 = 1789773.00              // 1.789773 Mhz
-const ppuClockFrequency float64 = cpuClockFrequency * 3.0 // ppu frequency is triple of cpu, used as base cycle
-const apuClockFrequency float64 = cpuClockFrequency / 2.0 // apu frequency is half of cpu
-const audioSampleRate float64 = 44100.00                  // standard 44.1Khz sample rate
-const cyclesPerSample float64 = ppuClockFrequency / audioSampleRate
+const cpuClockFrequency float64 = 1789773.00                        // 1.789773 Mhz
+const ppuClockFrequency float64 = cpuClockFrequency * 3.0           // ppu frequency is triple of cpu, used as base cycle
+const apuClockFrequency float64 = cpuClockFrequency / 2.0           // apu frequency is half of cpu
+const audioSampleRate float64 = 44100.00                            // standard 44.1Khz sample rate
+const cyclesPerSample float64 = ppuClockFrequency / audioSampleRate // approx 121 cycles
+// sampleRate 44100 / 60fps
+const samplesPerFrame = 735
 
 const (
 	screenWidth  = 256
@@ -33,8 +36,10 @@ const (
 )
 
 type Game struct {
-	pixels []byte
-	screen *ebiten.Image
+	pixels      []byte
+	audioBuffer []byte
+	screen      *ebiten.Image
+	audioPipe   *io.PipeWriter
 }
 
 var JoyPad1 *controller.JoyPad
@@ -45,14 +50,31 @@ func main() {
 	pprof.StartCPUProfile(f)
 	defer pprof.StopCPUProfile()
 
-	sr := beep.SampleRate(44100)
-	speaker.Init(sr, sr.N(time.Second/10))
+	op := &oto.NewContextOptions{}
+	op.SampleRate = int(audioSampleRate)
+	op.ChannelCount = 1
+	op.Format = oto.FormatSignedInt16LE
+
+	otoCtx, ready, err := oto.NewContext(op)
+	if err != nil {
+		fmt.Println("Error initializing oto context\n")
+		return
+	}
+	<-ready
+
+	pipeReader, pipeWriter := io.Pipe()
+	player := otoCtx.NewPlayer(pipeReader)
+	// 3000 samples of 2 bytes
+	player.SetBufferSize(5000 * 2)
+	player.Play()
+
+	defer player.Close()
 
 	ebiten.SetWindowSize(screenWidth*scale, screenHeight*scale)
 	ebiten.SetWindowTitle("My Emulator (debug)")
 
 	// setup and load cartridge
-	nestest := cartridge.ReadFromFile("./testFiles/supermario3.nes")
+	nestest := cartridge.ReadFromFile("./testFiles/supermario.nes")
 	Mapper = mappers.NewMapper(&nestest)
 
 	memory.LoadCartridge(Mapper)
@@ -66,8 +88,10 @@ func main() {
 	memory.ConnectJoyPad1(JoyPad1)
 
 	game := &Game{
-		pixels: make([]byte, screenWidth*screenHeight*4),
-		screen: ebiten.NewImage(screenWidth, screenHeight),
+		pixels:      make([]byte, screenWidth*screenHeight*4),
+		audioBuffer: make([]byte, samplesPerFrame*2),
+		screen:      ebiten.NewImage(screenWidth, screenHeight),
+		audioPipe:   pipeWriter,
 	}
 
 	if err := ebiten.RunGame(game); err != nil {
@@ -76,27 +100,34 @@ func main() {
 
 }
 
+var audioRate float64 = 0
+
 func (g *Game) Update() error {
 	handleInput()
 
 	// Emulation step
-	cycles := 0
-	audioRate := 0.0
-	for cycles < 89341 {
+	sampleCount := 0
+
+	// sync to audio because it is easier
+	for {
 		tick()
 		if audioRate >= cyclesPerSample {
 			audioRate -= cyclesPerSample
-			apu.GetSample()
+			sample := apu.GenSample()
+			binary.LittleEndian.PutUint16(g.audioBuffer[sampleCount*2:], uint16(sample))
+			sampleCount++
+			if sampleCount == samplesPerFrame {
+				break
+			}
+		} else {
+			audioRate++
 		}
-		cycles++
-		audioRate += 1
 	}
 
-	speaker.Play(apu.GetApu())
-	// time.Sleep(time.Second)
-	// Update pixels
-	rgb := ppu.GetPpu().CurrentFrame.GetPixelData()
+	g.audioPipe.Write(g.audioBuffer)
+	rgb := ppu.GetPpu().GetPixelData()
 	convertRGB24ToRGBA(g.pixels, rgb)
+
 	return nil
 }
 
