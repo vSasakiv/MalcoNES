@@ -40,6 +40,7 @@ const (
 type Game struct {
 	pixels      []byte
 	audioBuffer []byte
+	audioChan   chan []byte
 	screen      *ebiten.Image
 	audioPipe   *io.PipeWriter
 }
@@ -67,6 +68,31 @@ func main() {
 	pipeReader, pipeWriter := io.Pipe()
 	player := otoCtx.NewPlayer(pipeReader)
 	player.SetBufferSize(1200 * 2)
+
+	game := &Game{
+		pixels:      make([]byte, screenWidth*screenHeight*4),
+		audioBuffer: make([]byte, samplesPerFrame*2),
+		audioChan:   make(chan []byte, 10), // buffer up to 10 frames
+		screen:      ebiten.NewImage(screenWidth, screenHeight),
+		audioPipe:   pipeWriter,
+	}
+
+	silence := make([]byte, 735*2*2) // two frames of 735 samples (2 bytes per sample)
+
+	go func() {
+		pipeWriter.Write(silence)
+	}()
+
+	go func() {
+		for buf := range game.audioChan {
+			_, err := pipeWriter.Write(buf)
+			if err != nil {
+				log.Println("Audio write error:", err)
+				break
+			}
+		}
+	}()
+
 	player.Play()
 
 	defer player.Close()
@@ -87,13 +113,6 @@ func main() {
 
 	JoyPad1 = controller.NewJoypad()
 	memory.ConnectJoyPad1(JoyPad1)
-
-	game := &Game{
-		pixels:      make([]byte, screenWidth*screenHeight*4),
-		audioBuffer: make([]byte, samplesPerFrame*2),
-		screen:      ebiten.NewImage(screenWidth, screenHeight),
-		audioPipe:   pipeWriter,
-	}
 
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
@@ -126,7 +145,16 @@ func (g *Game) Update() error {
 		}
 	}
 
-	g.audioPipe.Write(g.audioBuffer)
+	// Copy buffer before sending (channels hold references)
+	buf := make([]byte, len(g.audioBuffer))
+	copy(buf, g.audioBuffer)
+
+	// Non-blocking send
+	select {
+	case g.audioChan <- buf:
+	default: // drop if channel is full to avoid blocking
+	}
+
 	rgb := ppu.GetPpu().GetPixelData()
 	convertRGB24ToRGBA(g.pixels, rgb)
 	duration := time.Since(start)
