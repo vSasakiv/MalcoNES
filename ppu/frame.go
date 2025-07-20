@@ -19,7 +19,5 @@ func (frame *Frame) GetPixelData() []uint8 {
 
 func (frame *Frame) setPixel(x uint, y uint, rgb [3]uint8) {
 	address := x*3 + y*3*XSIZE
-	frame.PixelData[address] = rgb[0]
-	frame.PixelData[address+1] = rgb[1]
-	frame.PixelData[address+2] = rgb[2]
+	copy(frame.PixelData[address:], rgb[:])
 }

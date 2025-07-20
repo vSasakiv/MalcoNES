@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"runtime/pprof"
+	"time"
 	"vsasakiv/nesemulator/apu"
 	"vsasakiv/nesemulator/cartridge"
 	"vsasakiv/nesemulator/controller"
@@ -21,11 +22,12 @@ import (
 
 var running bool
 
-const cpuClockFrequency float64 = 1789773.00                        // 1.789773 Mhz
-const ppuClockFrequency float64 = cpuClockFrequency * 3.0           // ppu frequency is triple of cpu, used as base cycle
-const apuClockFrequency float64 = cpuClockFrequency / 2.0           // apu frequency is half of cpu
-const audioSampleRate float64 = 44100.00                            // standard 44.1Khz sample rate
-const cyclesPerSample float64 = ppuClockFrequency / audioSampleRate // approx 121 cycles
+const cpuClockFrequency float64 = 1789773.00              // 1.789773 Mhz
+const ppuClockFrequency float64 = cpuClockFrequency * 3.0 // ppu frequency is triple of cpu, used as base cycle
+const apuClockFrequency float64 = cpuClockFrequency / 2.0 // apu frequency is half of cpu
+const audioSampleRate float64 = 44100.00                  // standard 44.1Khz sample rate
+const cyclesPerSample = 121.7532
+
 // sampleRate 44100 / 60fps
 const samplesPerFrame = 735
 
@@ -64,8 +66,7 @@ func main() {
 
 	pipeReader, pipeWriter := io.Pipe()
 	player := otoCtx.NewPlayer(pipeReader)
-	// 3000 samples of 2 bytes
-	player.SetBufferSize(5000 * 2)
+	player.SetBufferSize(1200 * 2)
 	player.Play()
 
 	defer player.Close()
@@ -103,6 +104,7 @@ func main() {
 var audioRate float64 = 0
 
 func (g *Game) Update() error {
+	start := time.Now()
 	handleInput()
 
 	// Emulation step
@@ -127,7 +129,10 @@ func (g *Game) Update() error {
 	g.audioPipe.Write(g.audioBuffer)
 	rgb := ppu.GetPpu().GetPixelData()
 	convertRGB24ToRGBA(g.pixels, rgb)
-
+	duration := time.Since(start)
+	if duration > time.Second/60 {
+		log.Printf("Slow frame detected: %v", duration)
+	}
 	return nil
 }
 

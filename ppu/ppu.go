@@ -35,6 +35,9 @@ type Ppu struct {
 	ppuStatus  uint8
 	ppuOamAddr uint8
 	ppuOamData uint8
+
+	ppuSpriteEnabled     bool
+	ppuBackgroundEnabled bool
 	// internal buffers
 	readBuffer uint8
 	// simulation clock cycles and scanlines
@@ -60,7 +63,7 @@ type Ppu struct {
 	fineX  uint8
 	write  uint8
 	// output buffers
-	outputPixelBuffer   [][3]uint8
+	currentPixel        uint
 	outputBackgroundRgb [][3]uint8
 	outputBackgroundVal []uint8
 }
@@ -69,7 +72,6 @@ type Ppu struct {
 func NewPpu() *Ppu {
 	var ppu Ppu
 
-	ppu.outputPixelBuffer = make([][3]uint8, 16)
 	ppu.outputBackgroundRgb = make([][3]uint8, 16)
 	ppu.outputBackgroundVal = make([]uint8, 16)
 	ppu.bufferFrames[0] = NewFrame()
@@ -110,7 +112,7 @@ func Clock() {
 	spriteEvaluate := visibleScanlines && ppu.cycles == 257
 
 	// rendering visible scanlines
-	if ppu.getMaskSetting(ENABLE_BACKGROUND) == 1 {
+	if ppu.ppuBackgroundEnabled {
 		if visibleScanlines {
 			if visibleCycles {
 				// draw pixel from output buffer
@@ -123,6 +125,7 @@ func Clock() {
 			}
 			// increment y -> go down a pixel
 			if ppu.cycles == 256 {
+				ppu.currentPixel = 0
 				ppu.incrementLoopyVY()
 			}
 			// get scrollx back to start
@@ -136,11 +139,11 @@ func Clock() {
 			}
 			// load second tile
 			if ppu.cycles == 335 {
-				for range 8 {
-					// shift background buffers
-					ppu.outputBackgroundVal = ShiftValBufferLeft(ppu.outputBackgroundVal)
-					ppu.outputBackgroundRgb = ShiftRgbBufferLeft(ppu.outputBackgroundRgb)
-				}
+				// for range 8 {
+				// 	// shift background buffers
+				// 	ppu.outputBackgroundVal = ShiftValBufferLeft(ppu.outputBackgroundVal)
+				// 	ppu.outputBackgroundRgb = ShiftRgbBufferLeft(ppu.outputBackgroundRgb)
+				// }
 				ppu.reloadBackgroundBuffer()
 				ppu.incrementLoopyVX()
 			}
@@ -150,7 +153,7 @@ func Clock() {
 		}
 	}
 
-	if ppu.getMaskSetting(ENABLE_SPRITE) == 1 {
+	if ppu.ppuSpriteEnabled {
 		if spriteEvaluate {
 			ppu.evaluateSprites()
 		}
@@ -223,6 +226,17 @@ func (ppu *Ppu) getControlSetting(setting string) uint8 {
 // ----- PPUMASK 0x2001 REGISTER -----
 
 func (ppu *Ppu) WriteToPpuMask(val uint8) {
+	if (val>>3)&0b1 == 1 {
+		ppu.ppuBackgroundEnabled = true
+	} else {
+		ppu.ppuBackgroundEnabled = false
+	}
+	if (val>>4)&0b1 == 1 {
+		ppu.ppuSpriteEnabled = true
+	} else {
+		ppu.ppuSpriteEnabled = false
+	}
+
 	ppu.ppuMask = val
 }
 
@@ -383,7 +397,8 @@ func (ppu *Ppu) WriteToPpuDataRegister(val uint8) {
 
 func (ppu *Ppu) renderPixel() {
 
-	rgb := ppu.outputBackgroundRgb[ppu.fineX]
+	bufferIdx := ppu.currentPixel + uint(ppu.fineX)
+	rgb := ppu.outputBackgroundRgb[bufferIdx]
 
 	for i := range ppu.spriteCount {
 		diff := int(ppu.cycles-1) - int(ppu.spritePosition[i])
@@ -396,41 +411,52 @@ func (ppu *Ppu) renderPixel() {
 			continue
 		}
 		// if sprite has priority or background is transparent we render it
-		if ppu.spritePriority[i] == 0 || ppu.outputBackgroundVal[ppu.fineX] == 0 {
+		if ppu.spritePriority[i] == 0 || ppu.outputBackgroundVal[bufferIdx] == 0 {
 			rgb = ppu.spritePalette[i][ppu.spriteLine[i][diff]]
 		}
 		// background is not transparent
-		if ppu.outputBackgroundVal[ppu.fineX] != 0 && ppu.spriteNumber[i] == 0 {
+		if ppu.outputBackgroundVal[bufferIdx] != 0 && ppu.spriteNumber[i] == 0 {
 			ppu.setSpriteZeroHit()
 		}
 		break
 	}
 
 	// if no sprite is rendered, render background instead
-	ppu.bufferFrames[1-ppu.frontBuffer].setPixel(ppu.cycles-1, ppu.scanlines, rgb)
-	// shift background buffers
-	ppu.outputBackgroundVal = ShiftValBufferLeft(ppu.outputBackgroundVal)
-	ppu.outputBackgroundRgb = ShiftRgbBufferLeft(ppu.outputBackgroundRgb)
-
+	address := ((ppu.cycles - 1) + ppu.scanlines*XSIZE) * 3
+	copy(ppu.bufferFrames[1-ppu.frontBuffer].PixelData[address:], rgb[:])
+	// ppu.bufferFrames[1-ppu.frontBuffer].setPixel(ppu.cycles-1, ppu.scanlines, rgb)
+	ppu.currentPixel++
+	if ppu.currentPixel == 8 {
+		ppu.currentPixel = 0
+	}
 }
 
 // ----- Background Rendering -----
 
 func (ppu *Ppu) reloadBackgroundBuffer() {
 	valueGroup, pixelGroup := ppu.getBackgroundGroup()
-	for i := range 8 {
-		ppu.outputBackgroundRgb[8+i] = pixelGroup[i]
-		ppu.outputBackgroundVal[8+i] = valueGroup[i]
-	}
+	copy(ppu.outputBackgroundRgb[0:8], ppu.outputBackgroundRgb[8:16])
+	copy(ppu.outputBackgroundVal[0:8], ppu.outputBackgroundVal[8:16])
+	copy(ppu.outputBackgroundRgb[8:16], pixelGroup[:])
+	copy(ppu.outputBackgroundVal[8:16], valueGroup[:])
+
+	// for i := range 8 {
+	// 	ppu.outputBackgroundRgb[8+i] = pixelGroup[i]
+	// 	ppu.outputBackgroundVal[8+i] = valueGroup[i]
+	// }
 }
 
 func (ppu *Ppu) getBackgroundGroup() ([8]uint8, [8][3]uint8) {
 	// coarseX := ppu.loopyV & 0x001F
 	// coarseY := (ppu.loopyV >> 5) & 0x001F
 
+	// fineY to select line of 8 pixels from tile
+	fineY := (ppu.loopyV >> 12) & 0b111
+
 	tileAddress := uint16(ppu.getControlSetting(BACKGROUND_TABLE_ADDRESS)) * 0x1000
 	nameTableEntry := PpuMemRead((ppu.loopyV & 0x0FFF) | 0x2000) // address = 10NNYYYYYXXXXX
-	tile := PpuMemReadTile(tileAddress + 0x10*uint16(nameTableEntry))
+	tile := PpuMemReadTileLine(tileAddress+0x10*uint16(nameTableEntry), fineY)
+	// tile := PpuMemReadTile(tileAddress + 0x10*uint16(nameTableEntry))
 
 	// black magic dont touch
 	attributeAddress := 0x23C0 | (ppu.loopyV & 0x0C00) | ((ppu.loopyV >> 4) & 0x38) | ((ppu.loopyV >> 2) & 0x07)
@@ -477,12 +503,10 @@ func (ppu *Ppu) getBackgroundGroup() ([8]uint8, [8][3]uint8) {
 
 	var pixelGroup [8][3]uint8
 	var valGroup [8]uint8
-	// fineY to select line of 8 pixels from tile
-	fineY := (ppu.loopyV >> 12) & 0b111
 
 	for i := range 8 {
-		lsb := tile[fineY] >> (8 - i - 1) & 0b1
-		msb := tile[fineY+8] >> (8 - i - 1) & 0b1
+		lsb := tile[0] >> (8 - i - 1) & 0b1
+		msb := tile[1] >> (8 - i - 1) & 0b1
 		pix := lsb | (msb << 1)
 		valGroup[i] = pix
 		pixelGroup[i] = palette[pix] // gets rgb of pixel
@@ -706,18 +730,6 @@ func SetBitToZero(n uint16, pos uint) uint16 {
 	return n & ^(1 << pos)
 }
 
-func ShiftRgbBufferLeft(slice [][3]uint8) [][3]uint8 {
-	copy(slice, slice[1:])
-	slice[len(slice)-1] = [3]uint8{0, 0, 0}
-	return slice
-}
-
-func ShiftValBufferLeft(slice []uint8) []uint8 {
-	copy(slice, slice[1:])
-	slice[len(slice)-1] = 0
-	return slice
-}
-
 // ----- syncing double buffering -----
 
 func (ppu *Ppu) GetPixelData() []uint8 {
@@ -730,8 +742,8 @@ func GetPpuStatus() mappers.Status {
 	status := mappers.Status{}
 	status.PpuScanlines = ppu.scanlines
 	status.PpuCycles = ppu.cycles
-	status.PpuBackgroundEnabled = ppu.getMaskSetting(ENABLE_BACKGROUND) == 1
-	status.PpuSpriteEnabled = ppu.getMaskSetting(ENABLE_SPRITE) == 1
+	status.PpuBackgroundEnabled = ppu.ppuBackgroundEnabled
+	status.PpuSpriteEnabled = ppu.ppuSpriteEnabled
 	return status
 }
 

@@ -20,12 +20,22 @@ const PPUADDR = 0x2006
 const PPUDATA = 0x2007
 const OAMDMA = 0x4014
 const APU_PULSE1_DUTY = 0x4000
+const APU_PULSE1_SWEEP = 0x4001
 const APU_PULSE1_TIMER_LOW = 0x4002
 const APU_PULSE1_TIMER_HIGH = 0x4003
 
 const APU_PULSE2_DUTY = 0x4004
+const APU_PULSE2_SWEEP = 0x4005
 const APU_PULSE2_TIMER_LOW = 0x4006
 const APU_PULSE2_TIMER_HIGH = 0x4007
+
+const APU_TRIANGLE_CONTROL = 0x4008
+const APU_TRIANGLE_TIMER_LOW = 0x400A
+const APU_TRIANGLE_TIMER_HIGH = 0x400B
+
+const APU_NOISE_CONTROL = 0x400C
+const APU_NOISE_PERIOD = 0x400E
+const APU_NOISE_LENGTH_COUNTER = 0x400F
 
 const APU_STATUS = 0x4015
 
@@ -135,12 +145,32 @@ func MemWrite(addr uint16, val uint8) {
 		apu.GetApu().Pulse1.WriteToTimerLow(val)
 	case addr == APU_PULSE1_TIMER_HIGH:
 		apu.GetApu().Pulse1.WriteToTimerHigh(val)
+	case addr == APU_PULSE1_SWEEP:
+		apu.GetApu().Pulse1.WriteToSweep(val)
+
 	case addr == APU_PULSE2_DUTY:
 		apu.GetApu().Pulse2.WriteToDutyCycleAndVolume(val)
 	case addr == APU_PULSE2_TIMER_LOW:
 		apu.GetApu().Pulse2.WriteToTimerLow(val)
 	case addr == APU_PULSE2_TIMER_HIGH:
 		apu.GetApu().Pulse2.WriteToTimerHigh(val)
+	case addr == APU_PULSE2_SWEEP:
+		apu.GetApu().Pulse2.WriteToSweep(val)
+
+	case addr == APU_TRIANGLE_CONTROL:
+		apu.GetApu().Triangle.WriteToLinearCounter(val)
+	case addr == APU_TRIANGLE_TIMER_LOW:
+		apu.GetApu().Triangle.WriteToTimerLow(val)
+	case addr == APU_TRIANGLE_TIMER_HIGH:
+		apu.GetApu().Triangle.WriteToTimerHigh(val)
+
+	case addr == APU_NOISE_CONTROL:
+		apu.GetApu().Noise.WriteToVolume(val)
+	case addr == APU_NOISE_PERIOD:
+		apu.GetApu().Noise.WriteToModeAndPeriod(val)
+	case addr == APU_NOISE_LENGTH_COUNTER:
+		apu.GetApu().Noise.WriteToLengthCounter(val)
+
 	case addr == APU_STATUS:
 		apu.GetApu().WriteToStatusRegister(val)
 	// OAMDMA, using interrupt

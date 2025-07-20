@@ -15,13 +15,16 @@ const Negative = "N"
 type Cpu struct {
 	Pc                          uint16
 	Acc, Xidx, Yidx, Sptr, Psts uint8
-	opcodeTable                 map[uint8]string
+	opcodeTable                 []string
 	cycles                      uint
 	cpuCycle                    uint
 	clockCounter                uint
 	hasNmiInterrupt             bool
 	hasOamDmaInterrupt          bool
 	hasIrqInterrupt             bool
+
+	instructionExecuting bool
+	instructionCycles    uint
 }
 
 // Initialize cpu with corret parameters, also initialize instructionTable
@@ -100,11 +103,19 @@ func Clock() {
 		return
 	}
 
-	instruction := memory.MemRead(cpu.Pc)
-	opcode := cpu.opcodeTable[instruction]
-	addresingMode := (instruction >> 2) & 0b00000111
+	if !cpu.instructionExecuting {
+		instruction := memory.MemRead(cpu.Pc)
+		opcode := cpu.opcodeTable[instruction]
+		addresingMode := (instruction >> 2) & 0b00000111
+		cpu.instructionExecuting = true
+		cpu.instructionCycles = cpu.calcCycles(instruction, opcode, addresingMode)
+	}
 	// execute next
-	if cpu.calcCycles(instruction, opcode, addresingMode) == cpu.cpuCycle {
+	if cpu.instructionCycles == cpu.cpuCycle {
+		instruction := memory.MemRead(cpu.Pc)
+		opcode := cpu.opcodeTable[instruction]
+		addresingMode := (instruction >> 2) & 0b00000111
+		cpu.instructionExecuting = false
 		cpu.cpuCycle = 0
 		// cpu.LastInstructionCycles = cpu.calcCycles(instruction, opcode, addresingMode)
 		// cpu.cycles += cpu.LastInstructionCycles

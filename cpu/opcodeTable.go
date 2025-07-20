@@ -82,8 +82,8 @@ const TXS = "TXS"
 
 const NOP = "NOP"
 
-func Generate() map[uint8]string {
-	opcodeTable := map[uint8]string{
+func Generate() []string {
+	opcodeTable := []string{
 		0x61: ADC,
 		0x65: ADC,
 		0x69: ADC,

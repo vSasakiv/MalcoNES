@@ -69,6 +69,13 @@ func PpuMemWrite(addr uint16, val uint8) {
 	}
 }
 
+func PpuMemReadTileLine(addr uint16, fineY uint16) [2]uint8 {
+	var tile [2]uint8
+	tile[0] = PpuMemRead(addr + fineY)
+	tile[1] = PpuMemRead(addr + fineY + 8)
+	return tile
+}
+
 func PpuMemReadTile(addr uint16) []uint8 {
 	var tile [16]uint8
 	for i := range uint8(16) {
