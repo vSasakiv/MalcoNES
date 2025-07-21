@@ -1,5 +1,9 @@
 package apu
 
+import (
+	"vsasakiv/nesemulator/mappers"
+)
+
 // the max samples per frame is actually 89341 / cyclePerSample which is approximately
 // 734 samples, so we use 1024 for safety
 const samplesPerFrame uint = 1024
@@ -37,6 +41,7 @@ type Apu struct {
 	Pulse2        Pulse
 	Triangle      TrianglePulse
 	Noise         NoiseChannel
+	Dmc           DMC
 	filterchain   FilterChain
 }
 
@@ -76,6 +81,7 @@ func Clock() {
 
 		apu.Triangle.clockTimer()
 		apu.Noise.clockTimer()
+		apu.Dmc.clockTimer()
 		apu.clockCounter = 0
 	}
 
@@ -118,6 +124,7 @@ func GenSample() float32 {
 	pulse2Sample := apu.Pulse2.getSample()
 	triangleSample := apu.Triangle.getSample()
 	noiseSample := apu.Noise.getSample()
+	dmcSample := apu.Dmc.getSample()
 
 	// mixedSample := apu.filterchain.Step(
 	// 	float32(pulseLookUpTable[pulse1Sample+pulse2Sample]))
@@ -126,7 +133,7 @@ func GenSample() float32 {
 
 	mixedSample := apu.filterchain.Step(
 		float32(pulseLookUpTable[pulse1Sample+pulse2Sample])) +
-		float32(mixerLookUpTable[3*triangleSample+2*noiseSample])
+		float32(mixerLookUpTable[3*triangleSample+2*noiseSample+dmcSample])
 	//
 	return mixedSample
 
@@ -138,10 +145,15 @@ func GetApu() *Apu {
 	return &apu
 }
 
+func (apu *Apu) SetMapper(mapper mappers.Mapper) {
+	apu.Dmc.mapper = mapper
+}
+
 // Write to status 0x4015 register
 func (apu *Apu) WriteToStatusRegister(val uint8) {
 	apu.Pulse1.setChannelEnabled(val&0b1 == 1)
 	apu.Pulse2.setChannelEnabled((val>>1)&0b1 == 1)
 	apu.Triangle.setChannelEnabled((val>>2)&0b1 == 1)
 	apu.Noise.setChannelEnabled((val>>3)&0b1 == 1)
+	apu.Dmc.setChannelEnabled((val>>4)&0b1 == 1)
 }

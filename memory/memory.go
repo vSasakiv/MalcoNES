@@ -37,6 +37,11 @@ const APU_NOISE_CONTROL = 0x400C
 const APU_NOISE_PERIOD = 0x400E
 const APU_NOISE_LENGTH_COUNTER = 0x400F
 
+const APU_DMC_CONTROL = 0x4010
+const APU_DMC_DIRECT_LOAD = 0x4011
+const APU_DMC_SAMPLE_ADDRESS = 0x4012
+const APU_DMC_SAMPLE_LENGTH = 0x4013
+
 const APU_STATUS = 0x4015
 
 const CONTROLLER1 = 0x4016
@@ -170,6 +175,15 @@ func MemWrite(addr uint16, val uint8) {
 		apu.GetApu().Noise.WriteToModeAndPeriod(val)
 	case addr == APU_NOISE_LENGTH_COUNTER:
 		apu.GetApu().Noise.WriteToLengthCounter(val)
+
+	case addr == APU_DMC_CONTROL:
+		apu.GetApu().Dmc.WriteToControl(val)
+	case addr == APU_DMC_DIRECT_LOAD:
+		apu.GetApu().Dmc.WriteToValue(val)
+	case addr == APU_DMC_SAMPLE_ADDRESS:
+		apu.GetApu().Dmc.WriteAddress(val)
+	case addr == APU_DMC_SAMPLE_LENGTH:
+		apu.GetApu().Dmc.WriteLength(val)
 
 	case addr == APU_STATUS:
 		apu.GetApu().WriteToStatusRegister(val)

@@ -22,6 +22,7 @@ type Cpu struct {
 	hasNmiInterrupt             bool
 	hasOamDmaInterrupt          bool
 	hasIrqInterrupt             bool
+	hasApuInterrupt             bool
 
 	instructionExecuting bool
 	instructionCycles    uint
@@ -48,6 +49,7 @@ func (cpu *Cpu) Reset() {
 	cpu.hasNmiInterrupt = false
 	cpu.hasOamDmaInterrupt = false
 	cpu.hasIrqInterrupt = false
+	cpu.hasApuInterrupt = false
 	cpu.Pc = memory.MemRead16(0xFFFC)
 }
 

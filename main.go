@@ -107,6 +107,7 @@ func main() {
 
 	memory.LoadCartridge(Mapper)
 	ppu.LoadCartridge(Mapper)
+	apu.GetApu().SetMapper(Mapper)
 
 	cpu.GetCpu().Reset()
 	ppu.GetPpu().Reset()
