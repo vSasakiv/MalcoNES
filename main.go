@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"os"
 	"runtime/pprof"
 	"time"
@@ -56,7 +57,7 @@ func main() {
 	op := &oto.NewContextOptions{}
 	op.SampleRate = int(audioSampleRate)
 	op.ChannelCount = 1
-	op.Format = oto.FormatSignedInt16LE
+	op.Format = oto.FormatFloat32LE
 
 	otoCtx, ready, err := oto.NewContext(op)
 	if err != nil {
@@ -67,17 +68,17 @@ func main() {
 
 	pipeReader, pipeWriter := io.Pipe()
 	player := otoCtx.NewPlayer(pipeReader)
-	player.SetBufferSize(1200 * 2)
+	player.SetBufferSize(1200 * 4)
 
 	game := &Game{
 		pixels:      make([]byte, screenWidth*screenHeight*4),
-		audioBuffer: make([]byte, samplesPerFrame*2),
+		audioBuffer: make([]byte, samplesPerFrame*4),
 		audioChan:   make(chan []byte, 10), // buffer up to 10 frames
 		screen:      ebiten.NewImage(screenWidth, screenHeight),
 		audioPipe:   pipeWriter,
 	}
 
-	silence := make([]byte, 735*2*2) // two frames of 735 samples (2 bytes per sample)
+	silence := make([]byte, 735*2*4) // two frames of 735 samples (4 bytes per sample)
 
 	go func() {
 		pipeWriter.Write(silence)
@@ -135,7 +136,8 @@ func (g *Game) Update() error {
 		if audioRate >= cyclesPerSample {
 			audioRate -= cyclesPerSample
 			sample := apu.GenSample()
-			binary.LittleEndian.PutUint16(g.audioBuffer[sampleCount*2:], uint16(sample))
+			bs := math.Float32bits(sample)
+			binary.LittleEndian.PutUint32(g.audioBuffer[sampleCount*4:], bs)
 			sampleCount++
 			if sampleCount == samplesPerFrame {
 				break

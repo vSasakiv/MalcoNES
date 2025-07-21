@@ -1,9 +1,5 @@
 package apu
 
-// using ppu clock, since it is the one that clocks the apu, even if it does nothing
-// makes it so that the timing will be more precise !
-const timePerClock float64 = 1.00 / 5369319.00
-
 // the max samples per frame is actually 89341 / cyclePerSample which is approximately
 // 734 samples, so we use 1024 for safety
 const samplesPerFrame uint = 1024
@@ -19,12 +15,12 @@ var mixerLookUpTable []float64 = BuildMixerLookupTable()
 type Apu struct {
 	clockCounter  uint
 	apuCycle      uint
-	realTime      float64
 	currentSample []byte
 	Pulse1        Pulse
 	Pulse2        Pulse
 	Triangle      TrianglePulse
 	Noise         NoiseChannel
+	filterchain   FilterChain
 }
 
 func NewApu() *Apu {
@@ -34,20 +30,23 @@ func NewApu() *Apu {
 	apu.Pulse1.channel = 1
 	apu.Pulse2.channel = 2
 	apu.Noise.shiftRegister = 1
+	apu.filterchain = FilterChain{
+		HighPassFilter(float32(44100), 90),
+		HighPassFilter(float32(44100), 440),
+		LowPassFilter(float32(44100), 14000),
+	}
 	return &apu
 }
 
 func (apu *Apu) Reset() {
 	apu.clockCounter = 0
 	apu.apuCycle = 0
-	apu.realTime = 0
 }
 
 var apu Apu = *NewApu()
 
 func Clock() {
 	apu.clockCounter++
-	apu.realTime += timePerClock
 	if apu.clockCounter == 3 {
 		// triangle clocks at cpu speed
 		apu.Triangle.clockTimer()
@@ -62,7 +61,7 @@ func Clock() {
 		apu.clockCounter = 0
 	}
 
-	if apu.apuCycle == 3728 {
+	if apu.apuCycle == 3728 && apu.clockCounter == 0 {
 		apu.Pulse1.clockEnvelope()
 		apu.Pulse2.clockEnvelope()
 
@@ -70,7 +69,7 @@ func Clock() {
 		apu.Triangle.clockLinearCounter()
 	}
 	// half frame
-	if apu.apuCycle == 7456 {
+	if apu.apuCycle == 7456 && apu.clockCounter == 0 {
 		apu.Pulse1.clockEnvelope()
 		apu.Pulse1.clockLengthCounter()
 		apu.Pulse1.clockSweep()
@@ -85,7 +84,7 @@ func Clock() {
 		apu.Noise.clockEnvelope()
 		apu.Noise.clockLengthCounter()
 	}
-	if apu.apuCycle == 11185 {
+	if apu.apuCycle == 11185 && apu.clockCounter == 0 {
 		apu.Pulse1.clockEnvelope()
 		apu.Pulse2.clockEnvelope()
 
@@ -94,7 +93,7 @@ func Clock() {
 		apu.Noise.clockEnvelope()
 	}
 	// half frame
-	if apu.apuCycle == 14914 {
+	if apu.apuCycle == 18640 && apu.clockCounter == 0 {
 		apu.Pulse1.clockEnvelope()
 		apu.Pulse1.clockLengthCounter()
 		apu.Pulse1.clockSweep()
@@ -109,22 +108,27 @@ func Clock() {
 		apu.Noise.clockEnvelope()
 		apu.Noise.clockLengthCounter()
 	}
-	if apu.apuCycle == 14915 {
+	if apu.apuCycle == 18641 {
 		apu.apuCycle = 0
 	}
 
 }
 
-func GenSample() int16 {
+func GenSample() float32 {
 	pulse1Sample := apu.Pulse1.getSample()
 	pulse2Sample := apu.Pulse2.getSample()
-	triangleSample := apu.Triangle.getSample()
-	noiseSample := apu.Noise.getSample()
+	// triangleSample := apu.Triangle.getSample()
+	// noiseSample := apu.Noise.getSample()
 
-	mixedSample := pulseLookUpTable[pulse1Sample+pulse2Sample] + mixerLookUpTable[3*triangleSample+2*noiseSample]
+	mixedSample := apu.filterchain.Step(
+		float32(pulseLookUpTable[pulse1Sample+pulse2Sample]))
+	// float32(mixerLookUpTable[3*triangleSample+2*noiseSample]))
+	// mixedSample := apu.filterchain.Step(float32(pulseLookUpTable[pulse1Sample+pulse2Sample]))
 
-	sample := int16((mixedSample*2 - 1) * 32767)
-	return sample
+	return mixedSample
+
+	// sample := int16((mixedSample*2 - 1) * 32767)
+	// return sample
 }
 
 func GetApu() *Apu {
@@ -201,6 +205,8 @@ type Pulse struct {
 	sweepSilence       bool
 
 	pulseTimer       uint
+	timerLow         uint8
+	timerHigh        uint8
 	pulseTimerPeriod uint
 
 	lengthCounter uint
@@ -269,7 +275,9 @@ func (pulse *Pulse) WriteToSweep(val uint8) {
 func (pulse *Pulse) WriteToTimerLow(val uint8) {
 	// val = LLLL.LLLL
 	// LLLL.LLLL -> lower 8 bits of sequencer timer
-	pulse.pulseTimerPeriod = uint(val) | (pulse.pulseTimerPeriod & 0xFF00)
+	pulse.timerLow = val
+	pulse.pulseTimerPeriod = uint(pulse.timerLow) | (uint(pulse.timerHigh) << 8)
+	// pulse.pulseTimerPeriod = uint(val) | (pulse.pulseTimerPeriod & 0xFF00)
 }
 
 // write to register 0x4003 / 0x4007 of pulse registers
@@ -278,7 +286,9 @@ func (pulse *Pulse) WriteToTimerHigh(val uint8) {
 	// llll.l -> length counter load
 	// HHH -> high 3 bits of sequencer timer
 	// also set the start envelope flag
-	pulse.pulseTimerPeriod = uint(val&0b111)<<8 | (pulse.pulseTimerPeriod & 0x00FF)
+	pulse.timerHigh = val & 0b111
+	pulse.pulseTimerPeriod = uint(pulse.timerLow) | (uint(pulse.timerHigh) << 8)
+	// pulse.pulseTimerPeriod = (uint(val&0b111) << 8) | (pulse.pulseTimerPeriod & 0x00FF)
 	pulse.lengthCounter = uint(lengthLookUpTable[(val >> 3)])
 	pulse.sequencerStep = 0
 	pulse.startEnvelope = true
@@ -315,7 +325,7 @@ func (pulse *Pulse) clockEnvelope() {
 func (pulse *Pulse) clockSequencer() {
 	// if the timer is 0, load the timer period and clock the sequencer
 	if pulse.pulseTimer == 0 {
-		pulse.pulseTimer = pulse.pulseTimerPeriod
+		pulse.pulseTimer = pulse.pulseTimerPeriod + 1
 		// we clock the sequencer
 		if pulse.sequencerStep == 0 {
 			pulse.sequencerStep = 7
@@ -618,7 +628,7 @@ func (noise *NoiseChannel) WriteToLengthCounter(val uint8) {
 	// llll.l -> length counter load
 
 	noise.envelopeRestart = true
-	noise.lengthCounter = (uint(val) >> 3)
+	noise.lengthCounter = uint(lengthLookUpTable[(uint(val) >> 3)])
 }
 
 // clocks only when the frame counter hits quarter frame

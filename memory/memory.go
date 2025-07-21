@@ -141,21 +141,21 @@ func MemWrite(addr uint16, val uint8) {
 		// APU registers
 	case addr == APU_PULSE1_DUTY:
 		apu.GetApu().Pulse1.WriteToDutyCycleAndVolume(val)
+	case addr == APU_PULSE1_SWEEP:
+		apu.GetApu().Pulse1.WriteToSweep(val)
 	case addr == APU_PULSE1_TIMER_LOW:
 		apu.GetApu().Pulse1.WriteToTimerLow(val)
 	case addr == APU_PULSE1_TIMER_HIGH:
 		apu.GetApu().Pulse1.WriteToTimerHigh(val)
-	case addr == APU_PULSE1_SWEEP:
-		apu.GetApu().Pulse1.WriteToSweep(val)
 
 	case addr == APU_PULSE2_DUTY:
 		apu.GetApu().Pulse2.WriteToDutyCycleAndVolume(val)
+	case addr == APU_PULSE2_SWEEP:
+		apu.GetApu().Pulse2.WriteToSweep(val)
 	case addr == APU_PULSE2_TIMER_LOW:
 		apu.GetApu().Pulse2.WriteToTimerLow(val)
 	case addr == APU_PULSE2_TIMER_HIGH:
 		apu.GetApu().Pulse2.WriteToTimerHigh(val)
-	case addr == APU_PULSE2_SWEEP:
-		apu.GetApu().Pulse2.WriteToSweep(val)
 
 	case addr == APU_TRIANGLE_CONTROL:
 		apu.GetApu().Triangle.WriteToLinearCounter(val)
