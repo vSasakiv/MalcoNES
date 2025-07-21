@@ -149,6 +149,13 @@ func (noise *NoiseChannel) clockQuarterFrame() {
 	noise.envelope.Clock()
 }
 
+func (noise *NoiseChannel) setChannelEnabled(enabled bool) {
+	if !enabled {
+		noise.lengthCounter.value = 0
+	}
+	noise.channelEnable = enabled
+}
+
 func (noise *NoiseChannel) getSample() uint {
 	if noise.shiftRegister&0b1 == 1 || noise.lengthCounter.value == 0 {
 		return 0

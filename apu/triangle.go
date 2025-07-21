@@ -15,9 +15,10 @@ var triangleSequencerTable = []uint8{
 type TrianglePulse struct {
 	channelEnable bool
 
-	linearCounterValue  uint
-	linearCounterPeriod uint
-	linearCounterReload bool
+	linearCounterValue   uint
+	linearCounterPeriod  uint
+	linearCounterReload  bool
+	linearCounterControl bool
 
 	// timerPeriod uint
 	// timerValue  uint
@@ -38,6 +39,7 @@ func (triangle *TrianglePulse) WriteToLinearCounter(val uint8) {
 
 	triangle.lengthCounter.halted = (val>>7)&0b1 == 1
 	triangle.linearCounterPeriod = uint(val & 0b111_1111)
+	triangle.linearCounterControl = (val>>7)&0b1 == 0
 }
 
 // write to register 0x400A of triangle pulse
@@ -93,12 +95,11 @@ func (triangle *TrianglePulse) clockSequencer() {
 func (triangle *TrianglePulse) clockLinearCounter() {
 	if triangle.linearCounterReload {
 		triangle.linearCounterValue = triangle.linearCounterPeriod
-		// if the control flag is clear, clear counter reload
-		if !triangle.lengthCounter.halted {
-			triangle.linearCounterReload = false
-		}
 	} else if triangle.linearCounterValue > 0 {
-		triangle.linearCounterValue -= 1
+		triangle.linearCounterValue--
+	}
+	if triangle.linearCounterControl {
+		triangle.linearCounterReload = false
 	}
 }
 
@@ -111,8 +112,15 @@ func (triangle *TrianglePulse) clockQuarterFrame() {
 	triangle.clockLinearCounter()
 }
 
+func (triangle *TrianglePulse) setChannelEnabled(enabled bool) {
+	if !enabled {
+		triangle.lengthCounter.value = 0
+	}
+	triangle.channelEnable = enabled
+}
+
 func (triangle *TrianglePulse) getSample() uint {
-	if !triangle.channelEnable || triangle.lengthCounter.halted || triangle.linearCounterValue == 0 || triangle.lengthCounter.value == 0 {
+	if !triangle.channelEnable || triangle.lengthCounter.halted {
 		return 0
 	}
 	//

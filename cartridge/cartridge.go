@@ -73,7 +73,6 @@ func ReadFromFile(path string) Cartridge {
 	cartridge.ChrRom = chrRom
 
 	cartridge.ChrRam = make([]byte, cartridge.ChrRamSize)
-	fmt.Println(len(cartridge.ChrRam))
 
 	return cartridge
 }

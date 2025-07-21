@@ -81,61 +81,17 @@ func Clock() {
 
 	if apu.apuCycle == 3728 && apu.clockCounter == 0 {
 		clockQuarterFrame()
-		// apu.Pulse1.clockQuarterFrame()
-		// apu.Pulse2.clockQuarterFrame()
-		// apu.Pulse1.clockEnvelope()
-		// apu.Pulse2.clockEnvelope()
-
-		// apu.Noise.clockEnvelope()
-		// apu.Noise.clockQuarterFrame()
-		// apu.Triangle.clockLinearCounter()
-		// apu.Triangle.clockQuarterFrame()
 	}
 	// half frame
 	if apu.apuCycle == 7456 && apu.clockCounter == 0 {
 		clockHalfFrame()
-		// apu.Pulse1.clockHalfFrame()
-		// apu.Pulse2.clockHalfFrame()
-		// apu.Pulse1.clockEnvelope()
-		// apu.Pulse1.clockLengthCounter()
-		// apu.Pulse1.clockSweep()
-		//
-		// apu.Pulse2.clockEnvelope()
-		// apu.Pulse2.clockLengthCounter()
-		// apu.Pulse2.clockSweep()
-
-		// apu.Triangle.clockLengthCounter()
-		// apu.Triangle.clockLinearCounter()
-		// apu.Triangle.clockHalfFrame()
-
-		// apu.Noise.clockEnvelope()
-		// apu.Noise.clockLengthCounter()
-		// apu.Noise.clockHalfFrame()
 	}
 	if apu.apuCycle == 11185 && apu.clockCounter == 0 {
 		clockQuarterFrame()
-		// apu.Pulse1.clockQuarterFrame()
-		// apu.Pulse2.clockQuarterFrame()
-
-		// apu.Triangle.clockLinearCounter()
-		// apu.Triangle.clockQuarterFrame()
-
-		// apu.Noise.clockEnvelope()
-		// apu.Noise.clockQuarterFrame()
 	}
 	// half frame
 	if apu.apuCycle == 18640 && apu.clockCounter == 0 {
 		clockHalfFrame()
-		// apu.Pulse1.clockHalfFrame()
-		// apu.Pulse2.clockHalfFrame()
-
-		// apu.Triangle.clockLengthCounter()
-		// apu.Triangle.clockLinearCounter()
-		// apu.Triangle.clockHalfFrame()
-
-		// apu.Noise.clockEnvelope()
-		// apu.Noise.clockLengthCounter()
-		// apu.Noise.clockHalfFrame()
 	}
 	if apu.apuCycle == 18641 {
 		apu.apuCycle = 0
@@ -160,14 +116,18 @@ func clockQuarterFrame() {
 func GenSample() float32 {
 	pulse1Sample := apu.Pulse1.getSample()
 	pulse2Sample := apu.Pulse2.getSample()
-	// triangleSample := apu.Triangle.getSample()
-	// noiseSample := apu.Noise.getSample()
+	triangleSample := apu.Triangle.getSample()
+	noiseSample := apu.Noise.getSample()
 
-	mixedSample := apu.filterchain.Step(
-		float32(pulseLookUpTable[pulse1Sample+pulse2Sample]))
+	// mixedSample := apu.filterchain.Step(
+	// 	float32(pulseLookUpTable[pulse1Sample+pulse2Sample]))
 	// float32(mixerLookUpTable[3*triangleSample+2*noiseSample]))
 	// mixedSample := apu.filterchain.Step(float32(pulseLookUpTable[pulse1Sample+pulse2Sample]))
 
+	mixedSample := apu.filterchain.Step(
+		float32(pulseLookUpTable[pulse1Sample+pulse2Sample])) +
+		float32(mixerLookUpTable[3*triangleSample+2*noiseSample])
+	//
 	return mixedSample
 
 	// sample := int16((mixedSample*2 - 1) * 32767)
@@ -180,8 +140,8 @@ func GetApu() *Apu {
 
 // Write to status 0x4015 register
 func (apu *Apu) WriteToStatusRegister(val uint8) {
-	apu.Pulse1.channelEnable = val&0b1 == 1
-	apu.Pulse2.channelEnable = (val>>1)&0b1 == 1
-	apu.Triangle.channelEnable = (val>>2)&0b1 == 1
-	apu.Noise.channelEnable = (val>>3)&0b1 == 1
+	apu.Pulse1.setChannelEnabled(val&0b1 == 1)
+	apu.Pulse2.setChannelEnabled((val>>1)&0b1 == 1)
+	apu.Triangle.setChannelEnabled((val>>2)&0b1 == 1)
+	apu.Noise.setChannelEnabled((val>>3)&0b1 == 1)
 }

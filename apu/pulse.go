@@ -53,7 +53,7 @@ func (pulse *Pulse) WriteToDutyCycleAndVolume(val uint8) {
 	// pulse.envelopeDividerPeriod = uint(val & 0x0F)
 
 	pulse.dutyCycle = uint((val >> 6) & 0b11)
-	pulse.envelope.loop = (val>>5)&0b1 == 0
+	pulse.envelope.loop = (val>>5)&0b1 == 1
 	pulse.envelope.isConstant = (val>>4)&0b1 == 1
 	pulse.envelope.constVolume = uint(val & 0x0F)
 	pulse.envelope.period = uint(val & 0x0f)
@@ -147,7 +147,6 @@ func (pulse *Pulse) calculateTargetPeriod() uint {
 	} else {
 		pulse.sweepSilence = false
 	}
-
 	return result
 }
 
@@ -179,6 +178,13 @@ func (pulse *Pulse) clockHalfFrame() {
 
 func (pulse *Pulse) clockQuarterFrame() {
 	pulse.envelope.Clock()
+}
+
+func (pulse *Pulse) setChannelEnabled(enabled bool) {
+	if !enabled {
+		pulse.lengthCounter.value = 0
+	}
+	pulse.channelEnable = enabled
 }
 
 func (pulse *Pulse) getSample() uint {
