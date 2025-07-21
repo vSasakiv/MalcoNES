@@ -31,8 +31,6 @@ type Pulse struct {
 	sweepValue         uint
 	sweepSilence       bool
 
-	// lengthCounter uint
-
 	envelope      Envelope
 	lengthCounter LengthCounter
 	timer         RawTimer
@@ -45,13 +43,6 @@ func (pulse *Pulse) WriteToDutyCycleAndVolume(val uint8) {
 	// L -> lenghtEnable : 1 = infinite ; 0 = enable counter
 	// C -> constantEnvelope : 1 volume = constant ; 0 = use the envelope
 	// VVVV -> constant volume if C = 1 or envelope decay if C = 0
-
-	// pulse.lengthCounterHalt = (val>>5)&0b1 == 1
-	// pulse.envelopeLoop = (val>>5)&0b1 == 0
-	// pulse.constantEnvelope = (val>>4)&0b1 == 1
-	// pulse.envelopeConstantVolume = uint(val & 0x0F)
-	// pulse.envelopeDividerPeriod = uint(val & 0x0F)
-
 	pulse.dutyCycle = uint((val >> 6) & 0b11)
 	pulse.envelope.loop = (val>>5)&0b1 == 1
 	pulse.envelope.isConstant = (val>>4)&0b1 == 1
@@ -67,7 +58,6 @@ func (pulse *Pulse) WriteToSweep(val uint8) {
 	// PPP -> sweep divider period
 	// N -> sweep negate
 	// SSS - > shift ammount
-
 	pulse.sweepEnabled = (val>>7)&0b1 == 1
 	pulse.sweepDividerPeriod = uint((val>>4)&0b111) + 1
 	pulse.sweepNegate = (val>>3)&0b1 == 1
@@ -79,9 +69,6 @@ func (pulse *Pulse) WriteToSweep(val uint8) {
 func (pulse *Pulse) WriteToTimerLow(val uint8) {
 	// val = LLLL.LLLL
 	// LLLL.LLLL -> lower 8 bits of sequencer timer
-	// pulse.timerLow = val
-	// pulse.pulseTimerPeriod = uint(pulse.timerLow) | (uint(pulse.timerHigh) << 8)
-	// pulse.pulseTimerPeriod = uint(val) | (pulse.pulseTimerPeriod & 0xFF00)
 	pulse.timer.setTimerLow(val)
 }
 
@@ -91,16 +78,10 @@ func (pulse *Pulse) WriteToTimerHigh(val uint8) {
 	// llll.l -> length counter load
 	// HHH -> high 3 bits of sequencer timer
 	// also set the start envelope flag
-	// pulse.timerHigh = val & 0b111
-	// pulse.pulseTimerPeriod = uint(pulse.timerLow) | (uint(pulse.timerHigh) << 8)
-	// pulse.pulseTimerPeriod = (uint(val&0b111) << 8) | (pulse.pulseTimerPeriod & 0x00FF)
-	// pulse.lengthCounter = uint(lengthLookUpTable[(val >> 3)])
-
 	pulse.envelope.reload = true
 	pulse.lengthCounter.setValue(uint(val) >> 3)
 	pulse.timer.setTimerHigh(val)
 	pulse.sequencerStep = 0
-	// pulse.startEnvelope = true
 }
 
 // clock the sweep unit

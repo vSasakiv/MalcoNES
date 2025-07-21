@@ -13,18 +13,7 @@ var noiseTable = []uint{
 
 type NoiseChannel struct {
 	channelEnable bool
-	// lengthCounterHalt bool
-	// envelopeLoop      bool
-	// lengthCounter uint
-
-	// constantEnvelope       bool
-	// envelopeRestart        bool
-	// decayCounter           uint
-	// envelopeConstantVolume uint
-	// envelopeDividerPeriod  uint
-	// envelopeDividerValue   uint
-
-	mode uint
+	mode          uint
 
 	timerPeriod uint
 	timerValue  uint
@@ -43,13 +32,6 @@ func (noise *NoiseChannel) WriteToVolume(val uint8) {
 	// L -> lenghtEnable : 1 = infinite ; 0 = enable counter
 	// C -> constantEnvelope : 1 volume = constant ; 0 = use the envelope
 	// VVVV -> constant volume if C = 1 or envelope decay if C = 0
-
-	// noise.lengthCounterHalt = (val>>5)&0b1 == 1
-	// noise.envelopeLoop = (val>>5)&0b1 == 0
-	// noise.constantEnvelope = (val>>4)&0b1 == 1
-	// noise.envelopeConstantVolume = uint(val & 0x0F)
-	// noise.envelopeDividerPeriod = uint(val & 0x0F)
-
 	noise.envelope.loop = (val>>5)&0b1 == 0
 	noise.envelope.isConstant = (val>>4)&0b1 == 1
 	noise.envelope.constVolume = uint(val & 0x0F)
@@ -62,7 +44,6 @@ func (noise *NoiseChannel) WriteToVolume(val uint8) {
 func (noise *NoiseChannel) WriteToModeAndPeriod(val uint8) {
 	// val = M___.PPPP
 	// PPPP -> timer period
-
 	noise.mode = (uint(val) >> 7) & 0b1
 	noise.timer.period = noiseTable[uint(val)&0x0F]
 }
@@ -73,55 +54,8 @@ func (noise *NoiseChannel) WriteToLengthCounter(val uint8) {
 	// llll.l -> length counter load
 
 	noise.envelope.reload = true
-	// noise.envelopeRestart = true
-	// noise.lengthCounter = uint(lengthLookUpTable[(uint(val) >> 3)])
 	noise.lengthCounter.setValue(uint(val >> 3))
 }
-
-// // clocks only when the frame counter hits quarter frame
-// func (noise *NoiseChannel) clockEnvelope() {
-// 	// if the start flag is set, load the decay counter and the divider with the respective values
-// 	if noise.envelopeRestart {
-// 		noise.decayCounter = envelopeStartVolume
-// 		noise.envelopeDividerValue = noise.envelopeDividerPeriod
-// 		noise.envelopeRestart = false
-// 	} else {
-// 		// envelope clocked while 0, we reload the period
-// 		if noise.envelopeDividerValue == 0 {
-// 			noise.envelopeDividerValue = noise.envelopeDividerPeriod
-// 			// now we clock the decay counter
-// 			// if the length counter halt flag is active, we just load decay with 15
-// 			if noise.decayCounter > 0 {
-// 				noise.decayCounter -= 1
-// 			} else if noise.envelopeLoop {
-// 				noise.decayCounter = 15
-// 			}
-// 			// if it is not set, we decrement if it is not already 0
-// 		} else {
-// 			// if it is not zero, we decrement the divider
-// 			noise.envelopeDividerValue -= 1
-// 		}
-// 	}
-// }
-
-// return the current envelope volume, if it is constant, return the value
-// loaded from register, if it is not constant, return the decay counter
-// of the envelope
-// func (noise *NoiseChannel) getEnvelopeVolume() uint {
-// 	if noise.constantEnvelope {
-// 		return noise.envelopeConstantVolume
-// 	} else {
-// 		return noise.decayCounter
-// 	}
-// }
-
-// clock the length counter
-// func (noise *NoiseChannel) clockLengthCounter() {
-// 	// disabling the channel via status also halts length counter
-// 	if !noise.lengthCounterHalt && noise.lengthCounter > 0 && noise.channelEnable {
-// 		noise.lengthCounter -= 1
-// 	}
-// }
 
 // clocks the timer
 func (noise *NoiseChannel) clockTimer() {

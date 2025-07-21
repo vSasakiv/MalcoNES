@@ -139,11 +139,6 @@ func Clock() {
 			}
 			// load second tile
 			if ppu.cycles == 335 {
-				// for range 8 {
-				// 	// shift background buffers
-				// 	ppu.outputBackgroundVal = ShiftValBufferLeft(ppu.outputBackgroundVal)
-				// 	ppu.outputBackgroundRgb = ShiftRgbBufferLeft(ppu.outputBackgroundRgb)
-				// }
 				ppu.reloadBackgroundBuffer()
 				ppu.incrementLoopyVX()
 			}
@@ -393,7 +388,7 @@ func (ppu *Ppu) WriteToPpuDataRegister(val uint8) {
 	ppu.incrementAddrRegister()
 }
 
-// ----- Rendering
+// ----- Rendering -----
 
 func (ppu *Ppu) renderPixel() {
 
@@ -424,7 +419,6 @@ func (ppu *Ppu) renderPixel() {
 	// if no sprite is rendered, render background instead
 	address := ((ppu.cycles - 1) + ppu.scanlines*XSIZE) * 3
 	copy(ppu.bufferFrames[1-ppu.frontBuffer].PixelData[address:], rgb[:])
-	// ppu.bufferFrames[1-ppu.frontBuffer].setPixel(ppu.cycles-1, ppu.scanlines, rgb)
 	ppu.currentPixel++
 	if ppu.currentPixel == 8 {
 		ppu.currentPixel = 0
@@ -440,23 +434,15 @@ func (ppu *Ppu) reloadBackgroundBuffer() {
 	copy(ppu.outputBackgroundRgb[8:16], pixelGroup[:])
 	copy(ppu.outputBackgroundVal[8:16], valueGroup[:])
 
-	// for i := range 8 {
-	// 	ppu.outputBackgroundRgb[8+i] = pixelGroup[i]
-	// 	ppu.outputBackgroundVal[8+i] = valueGroup[i]
-	// }
 }
 
 func (ppu *Ppu) getBackgroundGroup() ([8]uint8, [8][3]uint8) {
-	// coarseX := ppu.loopyV & 0x001F
-	// coarseY := (ppu.loopyV >> 5) & 0x001F
-
 	// fineY to select line of 8 pixels from tile
 	fineY := (ppu.loopyV >> 12) & 0b111
 
 	tileAddress := uint16(ppu.getControlSetting(BACKGROUND_TABLE_ADDRESS)) * 0x1000
 	nameTableEntry := PpuMemRead((ppu.loopyV & 0x0FFF) | 0x2000) // address = 10NNYYYYYXXXXX
 	tile := PpuMemReadTileLine(tileAddress+0x10*uint16(nameTableEntry), fineY)
-	// tile := PpuMemReadTile(tileAddress + 0x10*uint16(nameTableEntry))
 
 	// black magic dont touch
 	attributeAddress := 0x23C0 | (ppu.loopyV & 0x0C00) | ((ppu.loopyV >> 4) & 0x38) | ((ppu.loopyV >> 2) & 0x07)
@@ -466,8 +452,6 @@ func (ppu *Ppu) getBackgroundGroup() ([8]uint8, [8][3]uint8) {
 	paletteStart := uint16(DEFAULT_BG_PALETTE_ADDRESS)
 	subX := (ppu.loopyV & 0x02) == 0
 	subY := (ppu.loopyV & 0x40) == 0
-	// subX := coarseX % 2 // if is even x tile, is left of every 4 tile block
-	// subY := coarseY % 2 // if is even y tile, is top of every 4 tile block
 	switch {
 	// top left tiles
 	case subX && subY:
@@ -564,8 +548,6 @@ func (ppu *Ppu) evaluateSprites() {
 		}
 
 		count += 1
-
-		// frame.renderOamTile(tile, uint(tileX), uint(tileY), palette)
 	}
 	if count > 8 {
 		count = 8

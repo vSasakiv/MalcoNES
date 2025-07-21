@@ -27,7 +27,6 @@ type DMC struct {
 	bitCount       uint8
 	mapper         mappers.Mapper
 
-	// traeting cpuStall as interrupt that just wastes time
 	cpuStall bool
 	timer    RawTimer
 }

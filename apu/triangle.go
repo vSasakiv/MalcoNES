@@ -20,11 +20,6 @@ type TrianglePulse struct {
 	linearCounterReload  bool
 	linearCounterControl bool
 
-	// timerPeriod uint
-	// timerValue  uint
-
-	// lengthCounterHalt bool
-	// lengthCounter     uint
 	sequencerStep uint
 
 	lengthCounter LengthCounter
@@ -46,7 +41,6 @@ func (triangle *TrianglePulse) WriteToLinearCounter(val uint8) {
 func (triangle *TrianglePulse) WriteToTimerLow(val uint8) {
 	// val = LLLL.LLLL
 	// LLLL.LLLL -> lower 8 bits of sequencer timer
-	// triangle.timerPeriod = uint(val) | (triangle.timerPeriod & 0xFF00)
 	triangle.timer.setTimerLow(val)
 }
 
@@ -56,10 +50,6 @@ func (triangle *TrianglePulse) WriteToTimerHigh(val uint8) {
 	// llll.l -> length counter load
 	// HHH -> high 3 bits of sequencer timer
 	// also set the start envelope flag
-	// triangle.timerPeriod = uint(val&7)<<8 | (triangle.timerPeriod & 0x00FF)
-	// triangle.lengthCounter = uint(lengthLookUpTable[(val >> 3)])
-	// triangle.timerValue = triangle.timerPeriod
-
 	triangle.lengthCounter.setValue(uint(val) >> 3)
 	triangle.timer.setTimerHigh(val)
 	triangle.timer.value = triangle.timer.period
@@ -69,15 +59,6 @@ func (triangle *TrianglePulse) WriteToTimerHigh(val uint8) {
 // clocks the 11 bit timer every cpu cycle
 func (triangle *TrianglePulse) clockTimer() {
 	triangle.timer.Clock(triangle.clockSequencer)
-
-	// if triangle.timerValue == 0 {
-	// 	if triangle.linearCounterValue > 0 && triangle.lengthCounter.value > 0 {
-	// 		triangle.clockSequencer()
-	// 	}
-	// 	triangle.timerValue = triangle.timerPeriod
-	// } else {
-	// 	triangle.timerValue -= 1
-	// }
 }
 
 // clock the sequencer
@@ -123,7 +104,6 @@ func (triangle *TrianglePulse) getSample() uint {
 	if !triangle.channelEnable || triangle.lengthCounter.halted {
 		return 0
 	}
-	//
 	// hyper frequency mutes triangle
 	if triangle.timer.period < 3 {
 		return 0

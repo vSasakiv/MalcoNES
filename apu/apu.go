@@ -126,19 +126,11 @@ func GenSample() float32 {
 	noiseSample := apu.Noise.getSample()
 	dmcSample := apu.Dmc.getSample()
 
-	// mixedSample := apu.filterchain.Step(
-	// 	float32(pulseLookUpTable[pulse1Sample+pulse2Sample]))
-	// float32(mixerLookUpTable[3*triangleSample+2*noiseSample]))
-	// mixedSample := apu.filterchain.Step(float32(pulseLookUpTable[pulse1Sample+pulse2Sample]))
-
 	mixedSample := apu.filterchain.Step(
 		float32(pulseLookUpTable[pulse1Sample+pulse2Sample])) +
 		float32(mixerLookUpTable[3*triangleSample+2*noiseSample+dmcSample])
-	//
-	return mixedSample
 
-	// sample := int16((mixedSample*2 - 1) * 32767)
-	// return sample
+	return mixedSample
 }
 
 func GetApu() *Apu {
