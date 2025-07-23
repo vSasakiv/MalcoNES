@@ -51,6 +51,7 @@ func (cpu *Cpu) Reset() {
 	cpu.hasIrqInterrupt = false
 	cpu.hasApuInterrupt = false
 	cpu.Pc = memory.MemRead16(0xFFFC)
+	memory.MainMemory.Reset()
 }
 
 func GetCpu() *Cpu {

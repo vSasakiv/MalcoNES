@@ -102,16 +102,7 @@ func main() {
 	ebiten.SetWindowTitle("My Emulator (debug)")
 
 	// setup and load cartridge
-	nestest := cartridge.ReadFromFile("./testFiles/thelegendofzelda.nes")
-	Mapper = mappers.NewMapper(&nestest)
-
-	memory.LoadCartridge(Mapper)
-	ppu.LoadCartridge(Mapper)
-	apu.GetApu().SetMapper(Mapper)
-
-	cpu.GetCpu().Reset()
-	ppu.GetPpu().Reset()
-	apu.GetApu().Reset()
+	LoadRom("./testFiles/supermario2usa.nes")
 
 	JoyPad1 = controller.NewJoypad()
 	memory.ConnectJoyPad1(JoyPad1)
@@ -120,6 +111,25 @@ func main() {
 		log.Fatal(err)
 	}
 
+}
+
+func LoadRom(path string) {
+	gameCartridge := cartridge.ReadFromFile(path)
+	Mapper = mappers.NewMapper(&gameCartridge)
+
+	memory.LoadCartridge(Mapper)
+	ppu.LoadCartridge(Mapper)
+	apu.GetApu().SetMapper(Mapper)
+
+	cpu.GetCpu().Reset()
+	ppu.GetPpu().Reset()
+	apu.GetApu().Reset()
+}
+
+func (g *Game) Reset() {
+	cpu.GetCpu().Reset()
+	ppu.GetPpu().Reset()
+	apu.GetApu().Reset()
 }
 
 var audioRate float64 = 0

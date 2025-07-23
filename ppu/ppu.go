@@ -91,6 +91,7 @@ func (ppu *Ppu) Reset() {
 	ppu.loopyV = 0
 	ppu.loopyT = 0
 	ppu.fineX = 0
+	PpuMemory.Reset()
 }
 
 func GetPpu() *Ppu {

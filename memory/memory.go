@@ -61,6 +61,10 @@ var MainMemory Memory
 var modified Memory
 var debug bool = true
 
+func (memory Memory) Reset() {
+	MainMemory.ram = [0x0800]uint8{}
+}
+
 func LoadCartridge(mapper mappers.Mapper) {
 	MainMemory.Mapper = mapper
 }

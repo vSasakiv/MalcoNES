@@ -35,6 +35,12 @@ type Memory struct {
 
 var PpuMemory Memory
 
+func (ppuMemory Memory) Reset() {
+	PpuMemory.vram = [0x0800]uint8{}
+	PpuMemory.paletteRam = [0x0100]uint8{}
+	PpuMemory.oam = [0x0100]uint8{}
+}
+
 func LoadCartridge(mapper mappers.Mapper) {
 	PpuMemory.mapper = mapper
 }
