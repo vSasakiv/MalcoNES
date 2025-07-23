@@ -2,13 +2,13 @@ package main
 
 import (
 	"encoding/binary"
-	"fmt"
-	"io"
 	"log"
 	"math"
 	"os"
 	"runtime/pprof"
 	"time"
+	"unsafe"
+
 	"vsasakiv/nesemulator/apu"
 	"vsasakiv/nesemulator/cartridge"
 	"vsasakiv/nesemulator/controller"
@@ -17,19 +17,16 @@ import (
 	"vsasakiv/nesemulator/memory"
 	"vsasakiv/nesemulator/ppu"
 
-	"github.com/ebitengine/oto/v3"
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/veandco/go-sdl2/sdl"
 )
 
 var running bool
 
-const cpuClockFrequency float64 = 1789773.00              // 1.789773 Mhz
-const ppuClockFrequency float64 = cpuClockFrequency * 3.0 // ppu frequency is triple of cpu, used as base cycle
-const apuClockFrequency float64 = cpuClockFrequency / 2.0 // apu frequency is half of cpu
-const audioSampleRate float64 = 44100.00                  // standard 44.1Khz sample rate
+const cpuClockFrequency float64 = 1789773.00
+const ppuClockFrequency float64 = cpuClockFrequency * 3.0
+const apuClockFrequency float64 = cpuClockFrequency / 2.0
+const audioSampleRate float64 = 44100.00
 const cyclesPerSample = 121.7532
-
-// sampleRate 44100 / 60fps
 const samplesPerFrame = 735
 
 const (
@@ -42,8 +39,10 @@ type Game struct {
 	pixels      []byte
 	audioBuffer []byte
 	audioChan   chan []byte
-	screen      *ebiten.Image
-	audioPipe   *io.PipeWriter
+	renderer    *sdl.Renderer
+	texture     *sdl.Texture
+	window      *sdl.Window
+	audioDevice sdl.AudioDeviceID
 }
 
 var JoyPad1 *controller.JoyPad
@@ -54,55 +53,78 @@ func main() {
 	pprof.StartCPUProfile(f)
 	defer pprof.StopCPUProfile()
 
-	op := &oto.NewContextOptions{}
-	op.SampleRate = int(audioSampleRate)
-	op.ChannelCount = 1
-	op.Format = oto.FormatFloat32LE
-
-	otoCtx, ready, err := oto.NewContext(op)
-	if err != nil {
-		fmt.Println("Error initializing oto context\n")
-		return
+	// SDL Initialization
+	if err := sdl.Init(sdl.INIT_VIDEO | sdl.INIT_AUDIO | sdl.INIT_EVENTS); err != nil {
+		log.Fatal(err)
 	}
-	<-ready
+	defer sdl.Quit()
 
-	pipeReader, pipeWriter := io.Pipe()
-	player := otoCtx.NewPlayer(pipeReader)
-	player.SetBufferSize(1200 * 4)
+	// Setup window and renderer
+	window, err := sdl.CreateWindow("My Emulator (debug)", sdl.WINDOWPOS_UNDEFINED, sdl.WINDOWPOS_UNDEFINED,
+		screenWidth*scale, screenHeight*scale, sdl.WINDOW_SHOWN)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer window.Destroy()
+
+	renderer, err := sdl.CreateRenderer(window, -1, sdl.RENDERER_ACCELERATED)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer renderer.Destroy()
+
+	texture, err := renderer.CreateTexture(sdl.PIXELFORMAT_ABGR8888, sdl.TEXTUREACCESS_STREAMING, screenWidth, screenHeight)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer texture.Destroy()
+
+	// Setup audio
+	audioSpec := sdl.AudioSpec{
+		Freq:     int32(audioSampleRate),
+		Format:   sdl.AUDIO_F32LSB,
+		Channels: 1,
+		Samples:  512,
+	}
+	audioDevice, err := sdl.OpenAudioDevice("", false, &audioSpec, nil, 0)
+	if err != nil {
+		log.Fatalf("Failed to open audio device: %v", err)
+	}
+	defer sdl.CloseAudioDevice(audioDevice)
+	sdl.PauseAudioDevice(audioDevice, false)
 
 	game := &Game{
 		pixels:      make([]byte, screenWidth*screenHeight*4),
 		audioBuffer: make([]byte, samplesPerFrame*4),
-		audioChan:   make(chan []byte, 10), // buffer up to 10 frames
-		screen:      ebiten.NewImage(screenWidth, screenHeight),
-		audioPipe:   pipeWriter,
+		audioChan:   make(chan []byte, 10),
+		renderer:    renderer,
+		texture:     texture,
+		window:      window,
+		audioDevice: audioDevice,
 	}
 
-	silence := make([]byte, 735*2*4) // two frames of 735 samples (4 bytes per sample)
-
 	go func() {
-		pipeWriter.Write(silence)
-	}()
+		const maxQueuedFrames = 2 // allow 2 frames of audio in queue (~30ms)
 
-	go func() {
+		frameSize := samplesPerFrame * 4 // 735 samples * 4 bytes
 		for buf := range game.audioChan {
-			_, err := pipeWriter.Write(buf)
-			if err != nil {
-				log.Println("Audio write error:", err)
-				break
+			if len(buf) == 0 {
+				continue
+			}
+			if sdl.GetQueuedAudioSize(game.audioDevice) < uint32(maxQueuedFrames*frameSize) {
+				err := sdl.QueueAudio(game.audioDevice, buf)
+				if err != nil {
+					log.Println("SDL audio queue error:", err)
+				}
+			} else {
+				// Drop frame or block — here we drop to avoid latency build-up
+				// You can also: time.Sleep(time.Millisecond * 2)
 			}
 		}
 	}()
 
-	player.Play()
-
-	defer player.Close()
-
-	ebiten.SetWindowSize(screenWidth*scale, screenHeight*scale)
-	ebiten.SetWindowTitle("My Emulator (debug)")
-
-	// setup and load cartridge
-	nestest := cartridge.ReadFromFile("./testFiles/thelegendofzelda.nes")
+	// Load cartridge and connect subsystems
+	nestest := cartridge.ReadFromFile("./testFiles/supermario2usa.nes")
 	Mapper = mappers.NewMapper(&nestest)
 
 	memory.LoadCartridge(Mapper)
@@ -116,22 +138,39 @@ func main() {
 	JoyPad1 = controller.NewJoypad()
 	memory.ConnectJoyPad1(JoyPad1)
 
-	if err := ebiten.RunGame(game); err != nil {
-		log.Fatal(err)
-	}
+	mainLoop(game)
+}
 
+func mainLoop(g *Game) {
+	for {
+		start := time.Now()
+		for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
+			switch e := event.(type) {
+			case *sdl.QuitEvent:
+				return
+			case *sdl.KeyboardEvent:
+				handleInput(e)
+			}
+		}
+
+		if err := g.Update(); err != nil {
+			log.Println("Update error:", err)
+			break
+		}
+		g.Draw()
+
+		elapsed := time.Since(start)
+		if elapsed < time.Second/60 {
+			sdl.Delay(uint32((time.Second/60 - elapsed).Milliseconds()))
+		}
+	}
 }
 
 var audioRate float64 = 0
 
 func (g *Game) Update() error {
-	start := time.Now()
-	handleInput()
-
-	// Emulation step
 	sampleCount := 0
 
-	// sync to audio because it is easier
 	for {
 		tick()
 		if audioRate >= cyclesPerSample {
@@ -148,32 +187,25 @@ func (g *Game) Update() error {
 		}
 	}
 
-	// Copy buffer before sending (channels hold references)
 	buf := make([]byte, len(g.audioBuffer))
 	copy(buf, g.audioBuffer)
-
-	// Non-blocking send
 	select {
 	case g.audioChan <- buf:
-	default: // drop if channel is full to avoid blocking
+	default:
 	}
 
 	rgb := ppu.GetPpu().GetPixelData()
 	convertRGB24ToRGBA(g.pixels, rgb)
-	duration := time.Since(start)
-	if duration > time.Second/60 {
-		log.Printf("Slow frame detected: %v", duration)
-	}
 	return nil
 }
 
-func (g *Game) Draw(screen *ebiten.Image) {
-	g.screen.WritePixels(g.pixels)
-	screen.DrawImage(g.screen, nil)
-}
-
-func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	return screenWidth, screenHeight
+func (g *Game) Draw() {
+	if len(g.pixels) > 0 {
+		g.texture.Update(nil, unsafe.Pointer(&g.pixels[0]), screenWidth*4)
+	}
+	g.renderer.Clear()
+	g.renderer.Copy(g.texture, nil, nil)
+	g.renderer.Present()
 }
 
 func convertRGB24ToRGBA(dst []byte, src []byte) {
@@ -181,36 +213,43 @@ func convertRGB24ToRGBA(dst []byte, src []byte) {
 		dst[di] = src[si]
 		dst[di+1] = src[si+1]
 		dst[di+2] = src[si+2]
-		dst[di+3] = 0xFF // Opaque alpha
+		dst[di+3] = 0xFF
 	}
 }
 
-func handleInput() {
-	// Directional inputs
-	JoyPad1.SetButtonStatus(controller.LEFT, ifPressed(ebiten.KeyA))
-	JoyPad1.SetButtonStatus(controller.DOWN, ifPressed(ebiten.KeyS))
-	JoyPad1.SetButtonStatus(controller.RIGHT, ifPressed(ebiten.KeyD))
-	JoyPad1.SetButtonStatus(controller.UP, ifPressed(ebiten.KeyW))
+func handleInput(event *sdl.KeyboardEvent) {
+	pressed := event.State == sdl.PRESSED
 
-	// Buttons
-	JoyPad1.SetButtonStatus(controller.A, ifPressed(ebiten.KeyJ))
-	JoyPad1.SetButtonStatus(controller.B, ifPressed(ebiten.KeyK))
-	JoyPad1.SetButtonStatus(controller.START, ifPressed(ebiten.KeySpace))
-	JoyPad1.SetButtonStatus(controller.SELECT, ifPressed(ebiten.KeyZ))
+	switch event.Keysym.Sym {
+	case sdl.K_a:
+		JoyPad1.SetButtonStatus(controller.LEFT, boolToUint(pressed))
+	case sdl.K_s:
+		JoyPad1.SetButtonStatus(controller.DOWN, boolToUint(pressed))
+	case sdl.K_d:
+		JoyPad1.SetButtonStatus(controller.RIGHT, boolToUint(pressed))
+	case sdl.K_w:
+		JoyPad1.SetButtonStatus(controller.UP, boolToUint(pressed))
+	case sdl.K_j:
+		JoyPad1.SetButtonStatus(controller.A, boolToUint(pressed))
+	case sdl.K_k:
+		JoyPad1.SetButtonStatus(controller.B, boolToUint(pressed))
+	case sdl.K_SPACE:
+		JoyPad1.SetButtonStatus(controller.START, boolToUint(pressed))
+	case sdl.K_z:
+		JoyPad1.SetButtonStatus(controller.SELECT, boolToUint(pressed))
+	}
 }
 
-func ifPressed(key ebiten.Key) uint {
-	if ebiten.IsKeyPressed(key) {
+func boolToUint(b bool) uint {
+	if b {
 		return 1
 	}
 	return 0
 }
 
-// Clock all of the emulator components
 func tick() {
 	cpu.Clock()
 	apu.Clock()
 	ppu.Clock()
 	Mapper.Clock(ppu.GetPpuStatus())
-	// fmt.Println(cpu.GetCpu().TraceStatus())
 }
