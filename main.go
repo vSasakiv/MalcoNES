@@ -14,7 +14,6 @@ import (
 	"vsasakiv/nesemulator/controller"
 	"vsasakiv/nesemulator/cpu"
 	"vsasakiv/nesemulator/mappers"
-	"vsasakiv/nesemulator/memory"
 	"vsasakiv/nesemulator/ppu"
 
 	"github.com/ebitengine/oto/v3"
@@ -105,7 +104,7 @@ func main() {
 	nestest := cartridge.ReadFromFile("./testFiles/thelegendofzelda.nes")
 	Mapper = mappers.NewMapper(&nestest)
 
-	memory.LoadCartridge(Mapper)
+	cpu.LoadCartridge(Mapper)
 	ppu.LoadCartridge(Mapper)
 	apu.GetApu().SetMapper(Mapper)
 
@@ -114,7 +113,7 @@ func main() {
 	apu.GetApu().Reset()
 
 	JoyPad1 = controller.NewJoypad()
-	memory.ConnectJoyPad1(JoyPad1)
+	cpu.ConnectJoyPad1(JoyPad1)
 
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)

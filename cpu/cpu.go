@@ -1,7 +1,6 @@
 package cpu
 
 import (
-	"vsasakiv/nesemulator/memory"
 	"vsasakiv/nesemulator/ppu"
 )
 
@@ -50,7 +49,7 @@ func (cpu *Cpu) Reset() {
 	cpu.hasOamDmaInterrupt = false
 	cpu.hasIrqInterrupt = false
 	cpu.hasApuInterrupt = false
-	cpu.Pc = memory.MemRead16(0xFFFC)
+	cpu.Pc = MemRead16(0xFFFC)
 }
 
 func GetCpu() *Cpu {
@@ -76,7 +75,7 @@ func Clock() {
 		return
 	case cpu.hasOamDmaInterrupt:
 		if cpu.cpuCycle == 514 {
-			cpu.OamDmaWrite(memory.MainMemory.OamDmaPage)
+			cpu.OamDmaWrite(MainMemory.OamDmaPage)
 			cpu.hasOamDmaInterrupt = false
 			cpu.cpuCycle = 0
 		}
@@ -95,18 +94,18 @@ func Clock() {
 		return
 	}
 
-	if memory.PoolOamDmaInterrupt() {
+	if PoolOamDmaInterrupt() {
 		cpu.hasOamDmaInterrupt = true
 		return
 	}
 
-	if memory.MainMemory.Mapper.PollInterrupt() && cpu.getFlag(InterruptDisable) == 0 {
+	if MainMemory.Mapper.PollInterrupt() && cpu.getFlag(InterruptDisable) == 0 {
 		cpu.hasIrqInterrupt = true
 		return
 	}
 
 	if !cpu.instructionExecuting {
-		instruction := memory.MemRead(cpu.Pc)
+		instruction := MemRead(cpu.Pc)
 		opcode := cpu.opcodeTable[instruction]
 		addresingMode := (instruction >> 2) & 0b00000111
 		cpu.instructionExecuting = true
@@ -114,7 +113,7 @@ func Clock() {
 	}
 	// execute next
 	if cpu.instructionCycles == cpu.cpuCycle {
-		instruction := memory.MemRead(cpu.Pc)
+		instruction := MemRead(cpu.Pc)
 		opcode := cpu.opcodeTable[instruction]
 		addresingMode := (instruction >> 2) & 0b00000111
 		cpu.instructionExecuting = false
@@ -149,11 +148,11 @@ func Clock() {
 			cpu.Pc += uint16(size)
 		case STA:
 			address, size := cpu.getAluAddress(addresingMode)
-			memory.MemWrite(address, cpu.Acc)
+			MemWrite(address, cpu.Acc)
 			cpu.Pc += uint16(size)
 		case LDA:
 			address, size := cpu.getAluAddress(addresingMode)
-			var result uint8 = memory.MemRead(address)
+			var result uint8 = MemRead(address)
 			cpu.calcAndSetFlags([]string{Zero, Negative}, uint16(result), 0, 0)
 			cpu.Acc = result
 			cpu.Pc += uint16(size)
@@ -178,12 +177,12 @@ func Clock() {
 				cpu.Pc += 1
 			} else {
 				address, size := cpu.getAluAddress(addresingMode)
-				op := memory.MemRead(address)
+				op := MemRead(address)
 				result := op << 1
 				cpu.calcAndSetFlags([]string{Zero, Negative}, uint16(result), 0, 0)
 				cpu.setFlag(Carry, op>>7)
 
-				memory.MemWrite(address, result)
+				MemWrite(address, result)
 				cpu.Pc += uint16(size)
 			}
 		case ROL:
@@ -198,13 +197,13 @@ func Clock() {
 				cpu.Pc += 1
 			} else {
 				address, size := cpu.getAluAddress(addresingMode)
-				op := memory.MemRead(address)
+				op := MemRead(address)
 				carry := (op & 0b10000000) >> 7
 				result := (op << 1) + cpu.getFlag(Carry)
 				cpu.setFlag(Carry, carry)
 				cpu.calcAndSetFlags([]string{Zero, Negative}, uint16(result), 0, 0)
 
-				memory.MemWrite(address, result)
+				MemWrite(address, result)
 				cpu.Pc += uint16(size)
 			}
 		case LSR:
@@ -218,12 +217,12 @@ func Clock() {
 				cpu.Pc += 1
 			} else {
 				address, size := cpu.getAluAddress(addresingMode)
-				op := memory.MemRead(address)
+				op := MemRead(address)
 				result := op >> 1
 				cpu.calcAndSetFlags([]string{Zero, Negative}, uint16(result), 0, 0)
 				cpu.setFlag(Carry, op&0b1)
 
-				memory.MemWrite(address, result)
+				MemWrite(address, result)
 				cpu.Pc += uint16(size)
 			}
 		case ROR:
@@ -238,69 +237,69 @@ func Clock() {
 				cpu.Pc += 1
 			} else {
 				address, size := cpu.getAluAddress(addresingMode)
-				op := memory.MemRead(address)
+				op := MemRead(address)
 				carry := op & 0b1
 				result := (op >> 1) + (cpu.getFlag(Carry) << 7)
 				cpu.setFlag(Carry, carry)
 				cpu.calcAndSetFlags([]string{Zero, Negative}, uint16(result), 0, 0)
 
-				memory.MemWrite(address, result)
+				MemWrite(address, result)
 				cpu.Pc += uint16(size)
 			}
 		case DEC:
 			address, size := cpu.getAluAddress(addresingMode)
-			result := memory.MemRead(address) - 1
+			result := MemRead(address) - 1
 			cpu.calcAndSetFlags([]string{Zero, Negative}, uint16(result), 0, 0)
-			memory.MemWrite(address, result)
+			MemWrite(address, result)
 			cpu.Pc += uint16(size)
 		case INC:
 			address, size := cpu.getAluAddress(addresingMode)
-			result := memory.MemRead(address) + 1
+			result := MemRead(address) + 1
 			cpu.calcAndSetFlags([]string{Zero, Negative}, uint16(result), 0, 0)
-			memory.MemWrite(address, result)
+			MemWrite(address, result)
 			cpu.Pc += uint16(size)
 		case SLO:
 			address, size := cpu.getAluAddress(addresingMode)
-			op := memory.MemRead(address)
+			op := MemRead(address)
 			cpu.setFlag(Carry, op>>7)
 			result := (op<<1 | cpu.Acc)
 			cpu.calcAndSetFlags([]string{Zero, Negative}, uint16(result), 0, 0)
 
-			memory.MemWrite(address, op<<1)
+			MemWrite(address, op<<1)
 			cpu.Acc = result
 			cpu.Pc += uint16(size)
 		case RLA:
 			address, size := cpu.getAluAddress(addresingMode)
-			op := memory.MemRead(address)
+			op := MemRead(address)
 			carry := (op & 0b10000000) >> 7
 			mem := (op << 1) + cpu.getFlag(Carry)
 			result := mem & cpu.Acc
 			cpu.setFlag(Carry, carry)
 			cpu.calcAndSetFlags([]string{Zero, Negative}, uint16(result), 0, 0)
 
-			memory.MemWrite(address, mem)
+			MemWrite(address, mem)
 			cpu.Acc = result
 			cpu.Pc += uint16(size)
 		case SRE:
 			address, size := cpu.getAluAddress(addresingMode)
-			op := memory.MemRead(address)
+			op := MemRead(address)
 			cpu.setFlag(Carry, op&0b1)
 			result := (op >> 1) ^ cpu.Acc
 			cpu.calcAndSetFlags([]string{Zero, Negative}, uint16(result), 0, 0)
 
-			memory.MemWrite(address, op>>1)
+			MemWrite(address, op>>1)
 			cpu.Acc = result
 			cpu.Pc += uint16(size)
 		case RRA:
 			address, size := cpu.getAluAddress(addresingMode)
-			op := memory.MemRead(address)
+			op := MemRead(address)
 			carry := op & 0b1
 			mem := (op >> 1) + (cpu.getFlag(Carry) << 7)
 			cpu.setFlag(Carry, carry)
 
 			var result uint16 = uint16(cpu.Acc) + uint16(mem) + uint16(cpu.getFlag(Carry))
 			cpu.calcAndSetFlags([]string{Carry, Zero, Overflow, Negative}, result, cpu.Acc, mem)
-			memory.MemWrite(address, mem)
+			MemWrite(address, mem)
 			cpu.Acc = uint8(result)
 			cpu.Pc += uint16(size)
 		case SAX:
@@ -313,7 +312,7 @@ func Clock() {
 				aluAddress, size = cpu.getAluAddress(addresingMode)
 			}
 			result := cpu.Xidx & cpu.Acc
-			memory.MemWrite(aluAddress, result)
+			MemWrite(aluAddress, result)
 			cpu.Pc += uint16(size)
 		case LAX:
 			const zeroPageY uint8 = 0b101
@@ -333,16 +332,16 @@ func Clock() {
 			cpu.Pc += uint16(size)
 		case DCP:
 			address, size := cpu.getAluAddress(addresingMode)
-			result := memory.MemRead(address) - 1
+			result := MemRead(address) - 1
 			cpu.calcAndSetFlags([]string{Zero, Negative}, uint16(result), 0, 0)
-			memory.MemWrite(address, result)
+			MemWrite(address, result)
 			cpu.setCompareFlags(result, cpu.Acc)
 			cpu.Pc += uint16(size)
 		case ISB:
 			address, size := cpu.getAluAddress(addresingMode)
-			result := memory.MemRead(address) + 1
+			result := MemRead(address) + 1
 			cpu.calcAndSetFlags([]string{Zero, Negative}, uint16(result), 0, 0)
-			memory.MemWrite(address, result)
+			MemWrite(address, result)
 
 			var subResult uint16 = uint16(cpu.Acc) + uint16(^result) + uint16(cpu.getFlag(Carry))
 			cpu.calcAndSetFlags([]string{Carry, Zero, Overflow, Negative}, uint16(subResult), cpu.Acc, ^result)
@@ -400,8 +399,8 @@ func Clock() {
 			cpu.Pc += uint16(size)
 		case SHA:
 			address, size := cpu.getAluAddress(addresingMode)
-			result := (cpu.Xidx & cpu.Acc) & (memory.MemRead(cpu.Pc+2) + 1)
-			memory.MemWrite(address, result)
+			result := (cpu.Xidx & cpu.Acc) & (MemRead(cpu.Pc+2) + 1)
+			MemWrite(address, result)
 			cpu.Pc += uint16(size)
 		case LAS:
 			op, size := cpu.getAluOperand(addresingMode)
@@ -414,9 +413,9 @@ func Clock() {
 		case TAS:
 			address, size := cpu.getAluAddress(addresingMode)
 			andResult := cpu.Acc & cpu.Xidx
-			result := (cpu.Xidx & cpu.Acc) & (memory.MemRead(cpu.Pc+2) + 1)
+			result := (cpu.Xidx & cpu.Acc) & (MemRead(cpu.Pc+2) + 1)
 			cpu.Sptr = andResult
-			memory.MemWrite(address, result)
+			MemWrite(address, result)
 			cpu.Pc += uint16(size)
 
 		// stack manipulating instructions
@@ -497,18 +496,18 @@ func Clock() {
 		// jumping instructions
 		case JSR:
 			cpu.pushToStack16(cpu.Pc + 2)
-			cpu.Pc = memory.MemRead16(cpu.Pc + 1)
+			cpu.Pc = MemRead16(cpu.Pc + 1)
 		case JMP:
 			aluAddress, _ := cpu.getAluAddress(addresingMode)
 			// only occourence of indirect absolute
 			if instruction == 0x6C {
 				// instruction has bug
 				if aluAddress&0x00FF == 0x00FF {
-					low := uint16(memory.MemRead(aluAddress))
-					high := uint16(memory.MemRead(aluAddress&0xFF00)) << 8
+					low := uint16(MemRead(aluAddress))
+					high := uint16(MemRead(aluAddress&0xFF00)) << 8
 					cpu.Pc = high + low
 				} else {
-					cpu.Pc = memory.MemRead16(aluAddress)
+					cpu.Pc = MemRead16(aluAddress)
 				}
 			} else {
 				cpu.Pc = aluAddress
@@ -517,7 +516,7 @@ func Clock() {
 		// index register manipulating instructions
 		case STY:
 			aluAddress, size := cpu.getAluAddress(addresingMode)
-			memory.MemWrite(aluAddress, cpu.Yidx)
+			MemWrite(aluAddress, cpu.Yidx)
 			cpu.Pc += uint16(size)
 		case STX:
 			const zeroPageY uint8 = 0b101
@@ -528,7 +527,7 @@ func Clock() {
 			} else {
 				aluAddress, size = cpu.getAluAddress(addresingMode)
 			}
-			memory.MemWrite(aluAddress, cpu.Xidx)
+			MemWrite(aluAddress, cpu.Xidx)
 			cpu.Pc += uint16(size)
 		case DEY:
 			cpu.Yidx -= 1
@@ -548,11 +547,11 @@ func Clock() {
 			cpu.Pc += 1
 		case SHY:
 			address, size := cpu.getAluAddress(addresingMode)
-			memory.MemWrite(address, cpu.Yidx&(memory.MemRead(cpu.Pc+2)+1))
+			MemWrite(address, cpu.Yidx&(MemRead(cpu.Pc+2)+1))
 			cpu.Pc += uint16(size)
 		case SHX:
 			address, size := cpu.getAluAddress(addresingMode)
-			memory.MemWrite(address, cpu.Xidx&(memory.MemRead(cpu.Pc+2)+1))
+			MemWrite(address, cpu.Xidx&(MemRead(cpu.Pc+2)+1))
 			cpu.Pc += uint16(size)
 		case LDY:
 			var op, size uint8
@@ -647,13 +646,13 @@ func (cpu *Cpu) treatNmiInterrupt() {
 	cpu.pushToStack(cpu.Psts & 0b11101111)
 
 	cpu.setFlag(InterruptDisable, 1)
-	cpu.Pc = memory.MemRead16(0xFFFA)
+	cpu.Pc = MemRead16(0xFFFA)
 }
 
 func (cpu *Cpu) OamDmaWrite(page uint8) {
 	for i := range uint16(256) {
-		val := memory.MemRead((uint16(page) << 8) + i)
-		memory.MemWrite(memory.OAMDATA, val)
+		val := MemRead((uint16(page) << 8) + i)
+		MemWrite(OAMDATA, val)
 	}
 }
 
@@ -661,5 +660,5 @@ func (cpu *Cpu) treatIrqInterrupt() {
 	cpu.pushToStack16(cpu.Pc)
 	cpu.pushToStack(cpu.Psts | 0b00010000)
 	cpu.setFlag(InterruptDisable, 1)
-	cpu.Pc = memory.MemRead16(0xFFFE)
+	cpu.Pc = MemRead16(0xFFFE)
 }

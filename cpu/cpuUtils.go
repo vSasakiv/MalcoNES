@@ -6,9 +6,9 @@ import (
 	"log"
 	"os"
 	"slices"
+	"strings"
 	"vsasakiv/nesemulator/cartridge"
 	"vsasakiv/nesemulator/mappers"
-	"vsasakiv/nesemulator/memory"
 )
 
 const idxindirectX uint8 = 0b000
@@ -23,43 +23,43 @@ const absoluteX uint8 = 0b111
 // Receives an adressingMode, and returns the operand and total size of the instruction
 func (cpu *Cpu) getAluOperand(addressingMode uint8) (uint8, uint8) {
 	address, size := cpu.getAluAddress(addressingMode)
-	return memory.MemRead(address), size
+	return MemRead(address), size
 }
 
 // A small ammount of instructions actually use the ZeroPage with the Y register
 // instead of the default X register, such as LDX, STX
 func (cpu *Cpu) getAluOperandZeroPageY() (uint8, uint8) {
 	address, size := cpu.getAluAddressZeroPageY()
-	return memory.MemRead(address), size
+	return MemRead(address), size
 }
 
 // A small ammount of instructions actually use the ZeroPage with the Y register
 // instead of the default X register, such as LDX, STX
 func (cpu *Cpu) getAluAddressZeroPageY() (uint16, uint8) {
-	return uint16(memory.MemRead(cpu.Pc+1) + cpu.Yidx), 2
+	return uint16(MemRead(cpu.Pc+1) + cpu.Yidx), 2
 }
 
 // Receives an adressingMode, and returns the address and total size of the instruction
 func (cpu *Cpu) getAluAddress(addressingMode uint8) (uint16, uint8) {
 	switch addressingMode {
 	case idxindirectX:
-		zeroPageAddress := memory.MemRead(cpu.Pc + 1)
-		return memory.MemRead16(uint16(zeroPageAddress + cpu.Xidx)), 2
+		zeroPageAddress := MemRead(cpu.Pc + 1)
+		return MemRead16(uint16(zeroPageAddress + cpu.Xidx)), 2
 	case zeroPage:
-		return uint16(memory.MemRead(cpu.Pc + 1)), 2
+		return uint16(MemRead(cpu.Pc + 1)), 2
 	case immediate:
 		return uint16(cpu.Pc + 1), 2
 	case absolute:
-		return memory.MemRead16(cpu.Pc + 1), 3
+		return MemRead16(cpu.Pc + 1), 3
 	case indirectidxY:
-		nextByte := memory.MemRead(cpu.Pc + 1)
-		return memory.MemRead16(uint16(nextByte)) + uint16(cpu.Yidx), 2
+		nextByte := MemRead(cpu.Pc + 1)
+		return MemRead16(uint16(nextByte)) + uint16(cpu.Yidx), 2
 	case zeroPageX:
-		return uint16(memory.MemRead(cpu.Pc+1) + cpu.Xidx), 2
+		return uint16(MemRead(cpu.Pc+1) + cpu.Xidx), 2
 	case absoluteY:
-		return memory.MemRead16(cpu.Pc+1) + uint16(cpu.Yidx), 3
+		return MemRead16(cpu.Pc+1) + uint16(cpu.Yidx), 3
 	case absoluteX:
-		return memory.MemRead16(cpu.Pc+1) + uint16(cpu.Xidx), 3
+		return MemRead16(cpu.Pc+1) + uint16(cpu.Xidx), 3
 	default:
 		log.Printf("Warning: cpu.getAluAddress invalid addressingMode: %b\n", addressingMode)
 		return 0, 1
@@ -165,13 +165,13 @@ func (cpu *Cpu) calcAndSetFlags(flags []string, result uint16, reg uint8, operan
 }
 
 func (cpu *Cpu) pushToStack(val uint8) {
-	memory.MemWrite(uint16(cpu.Sptr)+0x0100, val)
+	MemWrite(uint16(cpu.Sptr)+0x0100, val)
 	cpu.Sptr -= 1
 }
 
 func (cpu *Cpu) pullFromStack() uint8 {
 	cpu.Sptr += 1
-	return memory.MemRead(uint16(cpu.Sptr) + 0x0100)
+	return MemRead(uint16(cpu.Sptr) + 0x0100)
 }
 
 func (cpu *Cpu) pushToStack16(val uint16) {
@@ -188,7 +188,7 @@ func (cpu *Cpu) pullFromStack16() uint16 {
 // executes simple branch if flag is equal to val
 func (cpu *Cpu) branchIfFlag(flag string, val uint8) {
 	if cpu.getFlag(flag) == val {
-		cpu.Pc = uint16(int16(cpu.Pc) + int16(2) + int16(int8(memory.MemRead(cpu.Pc+1))))
+		cpu.Pc = uint16(int16(cpu.Pc) + int16(2) + int16(int8(MemRead(cpu.Pc+1))))
 	} else {
 		cpu.Pc += 2
 	}
@@ -203,34 +203,6 @@ func (cpu *Cpu) setCompareFlags(operand uint8, reg uint8) {
 	} else {
 		cpu.setFlag(Carry, 0)
 	}
-}
-
-// ----- functions for tracing the execution of the CPU -----
-func (cpu *Cpu) TraceStatus() string {
-	opcode := memory.MemRead(cpu.Pc)
-
-	pc := fmt.Sprintf("%04X  ", cpu.Pc)
-	size := getInstructionSize(opcode)
-	instructionHex := ""
-	for i := range size {
-		instructionHex += fmt.Sprintf("%02X ", memory.MemRead(cpu.Pc+uint16(i)))
-	}
-	for range 3 - size {
-		instructionHex += "   "
-	}
-	if isIllegal(opcode) {
-		instructionHex += "*"
-	} else {
-		instructionHex += " "
-	}
-
-	instructionMnemonic := cpu.opcodeTable[opcode] + " "
-	// instructionOp := getOperand(opcode, cpu.Pc)
-	// instructionOp = instructionOp + strings.Repeat(" ", 28-len(instructionOp))
-	registers := cpu.getRegisters() + " "
-	cycles := fmt.Sprintf("CYC:%d", cpu.cycles)
-	// return pc + instructionHex + instructionMnemonic + instructionOp + registers + cycles
-	return pc + instructionHex + instructionMnemonic + registers + cycles
 }
 
 // given an instruction, calculates the ammount of cycles it takes
@@ -345,7 +317,7 @@ func cyclesPerAddressingMode(addressingMode uint8) uint {
 // 3 if taken, and 4 if taken and has page cross
 func (cpu *Cpu) branchCycles(flag string, val uint8) uint {
 	if cpu.getFlag(flag) == val {
-		address := uint16(int16(cpu.Pc) + int16(2) + int16(int8(memory.MemRead(cpu.Pc+1))))
+		address := uint16(int16(cpu.Pc) + int16(2) + int16(int8(MemRead(cpu.Pc+1))))
 		if address&0xFF00 != (cpu.Pc+uint16(2))&0xFF00 {
 			// taken and page crossed
 			return 4
@@ -402,7 +374,7 @@ func (cpu *Cpu) RunAndTraceToFile(path string) {
 	var trace string
 
 	for {
-		if memory.MemRead(cpu.Pc) == 0x00 {
+		if MemRead(cpu.Pc) == 0x00 {
 			fmt.Println("BRK instruction found, stopping execution")
 			return
 		}
@@ -423,7 +395,7 @@ func getOperand(opcode uint8, pc uint16) string {
 	// exceptions to the rule
 	switch mnemonic {
 	case BPL, BMI, BVC, BVS, BCC, BCS, BNE, BEQ:
-		address := uint16(int16(cpu.Pc) + int16(2) + int16(int8(memory.MemRead(cpu.Pc+1))))
+		address := uint16(int16(cpu.Pc) + int16(2) + int16(int8(MemRead(cpu.Pc+1))))
 		return fmt.Sprintf("$%04X", address)
 	case BRK, RTI, RTS, PHP, PLP, PHA, PLA, DEY, TAY, INY, INX,
 		CLC, SEC, CLI, SEI, TYA, CLV, CLD, SED, TXA, TAX, DEX,
@@ -436,19 +408,19 @@ func getOperand(opcode uint8, pc uint16) string {
 		aluAddress, _ := cpu.getAluAddress(addresingMode)
 		var result uint16
 		if aluAddress&0x00FF == 0x00FF {
-			low := uint16(memory.MemRead(aluAddress))
-			high := uint16(memory.MemRead(aluAddress&0xFF00)) << 8
+			low := uint16(MemRead(aluAddress))
+			high := uint16(MemRead(aluAddress&0xFF00)) << 8
 			result = high + low
 		} else {
-			result = memory.MemRead16(aluAddress)
+			result = MemRead16(aluAddress)
 		}
-		return fmt.Sprintf("($%04X) = %04X", memory.MemRead16(pc+1), result)
+		return fmt.Sprintf("($%04X) = %04X", MemRead16(pc+1), result)
 	//   LDY   CPY   CPX   LDX
 	case 0xA0, 0xC0, 0xE0, 0xA2:
-		return fmt.Sprintf("#$%02X", memory.MemRead(pc+1))
+		return fmt.Sprintf("#$%02X", MemRead(pc+1))
 	//   JSR
 	case 0x20, 0x4C:
-		return fmt.Sprintf("$%04X", memory.MemRead16(pc+1))
+		return fmt.Sprintf("$%04X", MemRead16(pc+1))
 	//   ASL   ROL   LSR   ROR
 	case 0x0A, 0x2A, 0x4A, 0x6A:
 		return "A"
@@ -456,12 +428,12 @@ func getOperand(opcode uint8, pc uint16) string {
 	case 0x96, 0xB6, 0x97, 0xB7:
 		address, _ := cpu.getAluAddressZeroPageY()
 		op, _ := cpu.getAluOperandZeroPageY()
-		return fmt.Sprintf("$%02X,Y @ %02X = %02X", memory.MemRead(pc+1), address, op)
+		return fmt.Sprintf("$%02X,Y @ %02X = %02X", MemRead(pc+1), address, op)
 	//   LDX   SHX   SHA   LAX
 	case 0xBE, 0x9E, 0x9F, 0xBF:
 		address, _ := cpu.getAluAddress(absoluteY)
 		op, _ := cpu.getAluOperand(absoluteY)
-		return fmt.Sprintf("$%04X,Y @ %04X = %02X", memory.MemRead16(pc+1), address, op)
+		return fmt.Sprintf("$%04X,Y @ %04X = %02X", MemRead16(pc+1), address, op)
 	//   size 1 nops
 	case 0xEA, 0x1A, 0x3A, 0x5A, 0x7A, 0xDA, 0xFA:
 		return ""
@@ -473,13 +445,13 @@ func getOperand(opcode uint8, pc uint16) string {
 
 	switch addresingMode {
 	case idxindirectX:
-		nextByte := memory.MemRead(pc + 1)
+		nextByte := MemRead(pc + 1)
 		address, _ := cpu.getAluAddress(idxindirectX)
 		op, _ := cpu.getAluOperand(idxindirectX)
 		return fmt.Sprintf("($%02X,X) @ %02X = %04X = %02X", nextByte, nextByte+cpu.Xidx, address, op)
 	case zeroPage:
 		op, _ := cpu.getAluOperand(zeroPage)
-		return fmt.Sprintf("$%02X = %02X", memory.MemRead(pc+1), op)
+		return fmt.Sprintf("$%02X = %02X", MemRead(pc+1), op)
 	case immediate:
 		op, _ := cpu.getAluOperand(immediate)
 		return fmt.Sprintf("#$%02X", op)
@@ -488,23 +460,23 @@ func getOperand(opcode uint8, pc uint16) string {
 		op, _ := cpu.getAluOperand(absolute)
 		return fmt.Sprintf("$%04X = %02X", address, op)
 	case indirectidxY:
-		nextByte := memory.MemRead(pc + 1)
-		prevAddress := memory.MemRead16(uint16(nextByte))
+		nextByte := MemRead(pc + 1)
+		prevAddress := MemRead16(uint16(nextByte))
 		address, _ := cpu.getAluAddress(indirectidxY)
 		op, _ := cpu.getAluOperand(indirectidxY)
 		return fmt.Sprintf("($%02X),Y = %04X @ %04X = %02X", nextByte, prevAddress, address, op)
 	case zeroPageX:
 		address, _ := cpu.getAluAddress(zeroPageX)
 		op, _ := cpu.getAluOperand(zeroPageX)
-		return fmt.Sprintf("$%02X,X @ %02X = %02X", memory.MemRead(pc+1), address, op)
+		return fmt.Sprintf("$%02X,X @ %02X = %02X", MemRead(pc+1), address, op)
 	case absoluteY:
 		address, _ := cpu.getAluAddress(absoluteY)
 		op, _ := cpu.getAluOperand(absoluteY)
-		return fmt.Sprintf("$%04X,Y @ %04X = %02X", memory.MemRead16(pc+1), address, op)
+		return fmt.Sprintf("$%04X,Y @ %04X = %02X", MemRead16(pc+1), address, op)
 	case absoluteX:
 		address, _ := cpu.getAluAddress(absoluteX)
 		op, _ := cpu.getAluOperand(absoluteX)
-		return fmt.Sprintf("$%04X,X @ %04X = %02X", memory.MemRead16(pc+1), address, op)
+		return fmt.Sprintf("$%04X,X @ %04X = %02X", MemRead16(pc+1), address, op)
 	}
 	return ""
 }
@@ -566,6 +538,33 @@ func getInstructionSize(opcode uint8) uint8 {
 	return size
 }
 
+// ----- functions for tracing the execution of the CPU -----
+func (cpu *Cpu) TraceStatus() string {
+	opcode := MemRead(cpu.Pc)
+
+	pc := fmt.Sprintf("%04X  ", cpu.Pc)
+	size := getInstructionSize(opcode)
+	instructionHex := ""
+	for i := range size {
+		instructionHex += fmt.Sprintf("%02X ", MemRead(cpu.Pc+uint16(i)))
+	}
+	for range 3 - size {
+		instructionHex += "   "
+	}
+	if isIllegal(opcode) {
+		instructionHex += "*"
+	} else {
+		instructionHex += " "
+	}
+
+	instructionMnemonic := cpu.opcodeTable[opcode] + " "
+	instructionOp := getOperand(opcode, cpu.Pc)
+	instructionOp = instructionOp + strings.Repeat(" ", 28-len(instructionOp))
+	registers := cpu.getRegisters() + " "
+	cycles := fmt.Sprintf("CYC:%d", cpu.cycles)
+	return pc + instructionHex + instructionMnemonic + instructionOp + registers + cycles
+}
+
 func NesTestLineByLine() {
 
 	file, err := os.Open("./testFiles/nestest.log")
@@ -577,7 +576,7 @@ func NesTestLineByLine() {
 
 	nestest := cartridge.ReadFromFile("./testFiles/nestest.nes")
 	mapper := mappers.NewMapper(&nestest)
-	memory.LoadCartridge(mapper)
+	LoadCartridge(mapper)
 	cpu.Pc = 0xC000
 
 	scanner := bufio.NewScanner(file)
