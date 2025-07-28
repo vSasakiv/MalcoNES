@@ -36,7 +36,7 @@ func (mapper *Mapper1) Read(address uint16) uint8 {
 	case address <= 0x0FFF:
 		// 8kb bank
 		if mapper.getControlRegister(CHR_ROM_MODE) == 0 {
-			bank := uint(mapper.chrBank0) & 0x0E
+			bank := uint(mapper.chrBank0 & 0x1E)
 			address := (bank * 0x1000) + uint(address)
 			if mapper.cartridge.ChrRamSize > 0 {
 				return mapper.cartridge.ChrRam[address]
@@ -45,7 +45,7 @@ func (mapper *Mapper1) Read(address uint16) uint8 {
 		} else
 		// 4kb bank each
 		if mapper.getControlRegister(CHR_ROM_MODE) == 1 {
-			bank := uint(mapper.chrBank0) & 0x0F
+			bank := uint(mapper.chrBank0 & 0x1F)
 			address := (bank * 0x1000) + uint(address)
 			if mapper.cartridge.ChrRamSize > 0 {
 				return mapper.cartridge.ChrRam[address]
@@ -56,7 +56,7 @@ func (mapper *Mapper1) Read(address uint16) uint8 {
 	case address >= 0x1000 && address <= 0x1FFF:
 		// 8kb bank
 		if mapper.getControlRegister(CHR_ROM_MODE) == 0 {
-			bank := uint(mapper.chrBank0) & 0x0E
+			bank := uint(mapper.chrBank0 & 0x1E)
 			address := (bank * 0x1000) + uint(address)
 			if mapper.cartridge.ChrRamSize > 0 {
 				return mapper.cartridge.ChrRam[address]
@@ -65,7 +65,7 @@ func (mapper *Mapper1) Read(address uint16) uint8 {
 		} else
 		// 4kb bank each
 		if mapper.getControlRegister(CHR_ROM_MODE) == 1 {
-			bank := uint(mapper.chrBank1) & 0x0F
+			bank := uint(mapper.chrBank1 & 0x1F)
 			address := (bank * 0x1000) + uint(address-0x1000)
 			if mapper.cartridge.ChrRamSize > 0 {
 				return mapper.cartridge.ChrRam[address]
@@ -106,8 +106,6 @@ func (mapper *Mapper1) Read(address uint16) uint8 {
 			bank := uint(mapper.prgBank) & 0x0E
 			return mapper.cartridge.PrgRom[(bank*0x4000)+uint(address-0x8000)]
 		}
-	default:
-		fmt.Println("flopou")
 	}
 	return 0
 }
@@ -118,7 +116,7 @@ func (mapper *Mapper1) Write(address uint16, val uint8) {
 		// 8kb bank
 		if mapper.getControlRegister(CHR_ROM_MODE) == 0 {
 			bank := uint(mapper.chrBank0) & 0x0E
-			address := (bank * 0x2000) + uint(address)
+			address := (bank * 0x1000) + uint(address)
 			if mapper.cartridge.ChrRamSize > 0 {
 				mapper.cartridge.ChrRam[address] = val
 			} else {
@@ -140,7 +138,7 @@ func (mapper *Mapper1) Write(address uint16, val uint8) {
 		// 8kb bank
 		if mapper.getControlRegister(CHR_ROM_MODE) == 0 {
 			bank := uint(mapper.chrBank0) & 0x0E
-			address := (bank * 0x2000) + uint(address)
+			address := (bank * 0x1000) + uint(address)
 			if mapper.cartridge.ChrRamSize > 0 {
 				mapper.cartridge.ChrRam[address] = val
 			} else {

@@ -101,7 +101,7 @@ func main() {
 	ebiten.SetWindowTitle("My Emulator (debug)")
 
 	// setup and load cartridge
-	nestest := cartridge.ReadFromFile("./testFiles/thelegendofzelda.nes")
+	nestest := cartridge.ReadFromFile("./testFiles/zelda2.nes")
 	Mapper = mappers.NewMapper(&nestest)
 
 	cpu.LoadCartridge(Mapper)
