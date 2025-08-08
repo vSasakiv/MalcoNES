@@ -46,6 +46,7 @@ type Game struct {
 }
 
 var JoyPad1 *controller.JoyPad
+var sdlJoystick *sdl.Joystick
 var Mapper mappers.Mapper
 
 func main() {
@@ -54,10 +55,21 @@ func main() {
 	defer pprof.StopCPUProfile()
 
 	// SDL Initialization
-	if err := sdl.Init(sdl.INIT_VIDEO | sdl.INIT_AUDIO | sdl.INIT_EVENTS); err != nil {
+	if err := sdl.Init(sdl.INIT_VIDEO | sdl.INIT_AUDIO | sdl.INIT_EVENTS | sdl.INIT_GAMECONTROLLER); err != nil {
 		log.Fatal(err)
 	}
 	defer sdl.Quit()
+
+	if sdl.NumJoysticks() > 0 {
+		log.Printf("Opening Joystick")
+		sdlJoystick = sdl.JoystickOpen(0)
+		log.Printf("Joystick opened: %s", sdlJoystick.Name())
+	}
+	defer func() {
+		if sdlJoystick != nil {
+			sdlJoystick.Close()
+		}
+	}()
 
 	// Setup window and renderer
 	window, err := sdl.CreateWindow("My Emulator (debug)", sdl.WINDOWPOS_UNDEFINED, sdl.WINDOWPOS_UNDEFINED,
@@ -124,7 +136,7 @@ func main() {
 	}()
 
 	// Load cartridge and connect subsystems
-	nestest := cartridge.ReadFromFile("./testFiles/supermario2usa.nes")
+	nestest := cartridge.ReadFromFile("./testFiles/supermario.nes")
 	Mapper = mappers.NewMapper(&nestest)
 
 	memory.LoadCartridge(Mapper)
@@ -149,7 +161,11 @@ func mainLoop(g *Game) {
 			case *sdl.QuitEvent:
 				return
 			case *sdl.KeyboardEvent:
-				handleInput(e)
+				// handleInput(e)
+			case *sdl.JoyButtonEvent:
+				handleJoyButtonInput(e)
+			case *sdl.JoyAxisEvent:
+				handleJoyAxisInput(e)
 			}
 		}
 
@@ -237,6 +253,51 @@ func handleInput(event *sdl.KeyboardEvent) {
 		JoyPad1.SetButtonStatus(controller.START, boolToUint(pressed))
 	case sdl.K_z:
 		JoyPad1.SetButtonStatus(controller.SELECT, boolToUint(pressed))
+	}
+}
+
+func handleJoyButtonInput(event *sdl.JoyButtonEvent) {
+	pressed := event.State == sdl.PRESSED
+
+	switch event.Button {
+	case 1: // A
+		JoyPad1.SetButtonStatus(controller.A, boolToUint(pressed))
+	case 0: // B
+		JoyPad1.SetButtonStatus(controller.B, boolToUint(pressed))
+	case 8: // SELECT
+		JoyPad1.SetButtonStatus(controller.SELECT, boolToUint(pressed))
+	case 9: // START
+		JoyPad1.SetButtonStatus(controller.START, boolToUint(pressed))
+	}
+}
+
+func handleJoyAxisInput(event *sdl.JoyAxisEvent) {
+	const deadzone = 16000
+
+	if event.Axis == 0 {
+		if event.Value < -deadzone {
+			JoyPad1.SetButtonStatus(controller.LEFT, 1)
+			JoyPad1.SetButtonStatus(controller.RIGHT, 0)
+		} else if event.Value > deadzone {
+			JoyPad1.SetButtonStatus(controller.RIGHT, 1)
+			JoyPad1.SetButtonStatus(controller.LEFT, 0)
+		} else {
+			JoyPad1.SetButtonStatus(controller.LEFT, 0)
+			JoyPad1.SetButtonStatus(controller.RIGHT, 0)
+		}
+	}
+
+	if event.Axis == 1 {
+		if event.Value < -deadzone {
+			JoyPad1.SetButtonStatus(controller.UP, 1)
+			JoyPad1.SetButtonStatus(controller.DOWN, 0)
+		} else if event.Value > deadzone {
+			JoyPad1.SetButtonStatus(controller.DOWN, 1)
+			JoyPad1.SetButtonStatus(controller.UP, 0)
+		} else {
+			JoyPad1.SetButtonStatus(controller.UP, 0)
+			JoyPad1.SetButtonStatus(controller.DOWN, 0)
+		}
 	}
 }
 
